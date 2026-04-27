@@ -1,0 +1,307 @@
+{
+  "entity": {
+    "name": "Todo",
+    "slice": "todo",
+    "appName": "Todo App",
+    "projectName": "todo-app",
+    "itemsField": "todoItems",
+    "currentField": "currentTodoItem",
+    "operations": [
+      "create",
+      "edit",
+      "update",
+      "toggle",
+      "delete"
+    ]
+  },
+  "trace": [
+    {
+      "task": "entity-schema",
+      "attempt": 1,
+      "ok": true
+    },
+    {
+      "task": "ui-theme",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "app-shell",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-types",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-initial",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-actions",
+      "ms": 1,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-reducer",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-selectors",
+      "attempt": 1,
+      "ok": true
+    },
+    {
+      "task": "state-selectors",
+      "ms": 8,
+      "via": "llm:selectors-agent",
+      "ok": true
+    },
+    {
+      "task": "filters-slice",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "config-slice",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "state-store",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "atomic-provider",
+      "ms": 1,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "ui-base-atoms",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "ui-context-atoms",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "ui-domain-atom",
+      "attempt": 1,
+      "ok": true
+    },
+    {
+      "task": "ui-domain-atom",
+      "ms": 3,
+      "via": "llm:atom-agent",
+      "ok": true
+    },
+    {
+      "task": "ui-skeleton",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "ui-layout",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    },
+    {
+      "task": "ui-molecule",
+      "attempt": 1,
+      "ok": false,
+      "errors": [
+        "missing required file: src/ui/molecules/AddTodoForm/AddTodoForm.component.jsx"
+      ]
+    },
+    {
+      "task": "ui-molecule",
+      "attempt": 2,
+      "ok": true
+    },
+    {
+      "task": "ui-molecule",
+      "ms": 7,
+      "via": "llm:molecule-agent",
+      "ok": true
+    },
+    {
+      "task": "ui-organism",
+      "attempt": 1,
+      "ok": true
+    },
+    {
+      "task": "ui-organism",
+      "ms": 6,
+      "via": "llm:organism-agent",
+      "ok": true
+    },
+    {
+      "task": "container",
+      "attempt": 1,
+      "ok": true
+    },
+    {
+      "task": "container",
+      "ms": 3,
+      "via": "llm:container-agent",
+      "ok": true
+    },
+    {
+      "task": "page",
+      "ms": 0,
+      "via": "deterministic",
+      "ok": true
+    }
+  ],
+  "files": [
+    ".gitignore",
+    ".storybook/main.js",
+    ".storybook/preview-head.html",
+    ".storybook/preview.js",
+    "README.md",
+    "index.html",
+    "package.json",
+    "src/App.jsx",
+    "src/App.test.jsx",
+    "src/containers/ConfigContainer.js",
+    "src/containers/ConfigContainer.test.jsx",
+    "src/containers/SiteHeaderContainer.jsx",
+    "src/containers/SiteHeaderContainer.test.jsx",
+    "src/containers/TodoFiltersContainer.jsx",
+    "src/containers/TodoFiltersContainer.test.jsx",
+    "src/containers/TodoListContainer.jsx",
+    "src/containers/TodoListContainer.test.jsx",
+    "src/index.jsx",
+    "src/pages/index.jsx",
+    "src/reportWebVitals.js",
+    "src/setupTests.js",
+    "src/state/config/config.actions.js",
+    "src/state/config/config.actions.test.js",
+    "src/state/config/config.initial.js",
+    "src/state/config/config.reducer.js",
+    "src/state/config/config.reducer.test.js",
+    "src/state/config/config.selectors.js",
+    "src/state/config/config.selectors.test.js",
+    "src/state/config/config.type.js",
+    "src/state/config/config.type.test.js",
+    "src/state/filters/filters.action.js",
+    "src/state/filters/filters.action.test.js",
+    "src/state/filters/filters.initial.js",
+    "src/state/filters/filters.reducer.js",
+    "src/state/filters/filters.reducer.test.js",
+    "src/state/filters/filters.selectors.js",
+    "src/state/filters/filters.selectors.test.js",
+    "src/state/filters/filters.type.js",
+    "src/state/filters/filters.type.test.js",
+    "src/state/index.js",
+    "src/state/rootReducer.js",
+    "src/state/rootReducer.test.js",
+    "src/state/todo/todo.actions.js",
+    "src/state/todo/todo.actions.test.js",
+    "src/state/todo/todo.initial.js",
+    "src/state/todo/todo.reducer.js",
+    "src/state/todo/todo.reducer.test.js",
+    "src/state/todo/todo.selectors.js",
+    "src/state/todo/todo.selectors.test.js",
+    "src/state/todo/todo.type.js",
+    "src/state/todo/todo.type.test.js",
+    "src/ui/atoms/Alert/Alert.component.jsx",
+    "src/ui/atoms/Alert/Alert.stories.js",
+    "src/ui/atoms/Alert/Alert.style.css",
+    "src/ui/atoms/Alert/Alert.test.jsx",
+    "src/ui/atoms/Button/Button.component.jsx",
+    "src/ui/atoms/Button/Button.stories.js",
+    "src/ui/atoms/Button/Button.style.css",
+    "src/ui/atoms/Button/Button.test.jsx",
+    "src/ui/atoms/Button/Button.type.js",
+    "src/ui/atoms/Button/Button.type.test.js",
+    "src/ui/atoms/IconButton/IconButton.component.jsx",
+    "src/ui/atoms/IconButton/IconButton.stories.js",
+    "src/ui/atoms/IconButton/IconButton.style.css",
+    "src/ui/atoms/IconButton/IconButton.test.jsx",
+    "src/ui/atoms/IconButton/IconButton.type.js",
+    "src/ui/atoms/IconButton/IconButton.type.test.js",
+    "src/ui/atoms/Image/Image.component.jsx",
+    "src/ui/atoms/Image/Image.stories.js",
+    "src/ui/atoms/Image/Image.style.css",
+    "src/ui/atoms/Image/Image.test.jsx",
+    "src/ui/atoms/Image/Image.type.js",
+    "src/ui/atoms/Image/Image.type.test.js",
+    "src/ui/atoms/Input/Input.component.jsx",
+    "src/ui/atoms/Input/Input.stories.js",
+    "src/ui/atoms/Input/Input.style.css",
+    "src/ui/atoms/Input/Input.test.jsx",
+    "src/ui/atoms/Input/Input.type.js",
+    "src/ui/atoms/Input/Input.type.test.js",
+    "src/ui/atoms/Link/Link.component.jsx",
+    "src/ui/atoms/Link/Link.stories.js",
+    "src/ui/atoms/Link/Link.style.css",
+    "src/ui/atoms/Link/Link.test.jsx",
+    "src/ui/atoms/Link/Link.type.js",
+    "src/ui/atoms/Link/Link.type.test.js",
+    "src/ui/atoms/Loader/Loader.component.jsx",
+    "src/ui/atoms/Loader/Loader.stories.js",
+    "src/ui/atoms/Loader/Loader.style.css",
+    "src/ui/atoms/Loader/Loader.test.jsx",
+    "src/ui/atoms/TodoItem/TodoItem.component.jsx",
+    "src/ui/atoms/TodoItem/TodoItem.stories.js",
+    "src/ui/atoms/TodoItem/TodoItem.style.css",
+    "src/ui/atoms/TodoItem/TodoItem.test.jsx",
+    "src/ui/atoms/TodoItem/TodoItem.type.js",
+    "src/ui/atoms/TodoItem/TodoItem.type.test.js",
+    "src/ui/molecules/AddTodoForm/AddTodoForm.component.jsx",
+    "src/ui/molecules/AddTodoForm/AddTodoForm.stories.js",
+    "src/ui/molecules/AddTodoForm/AddTodoForm.test.jsx",
+    "src/ui/molecules/FilterGroup/FilterGroup.component.jsx",
+    "src/ui/molecules/FilterGroup/FilterGroup.stories.js",
+    "src/ui/molecules/FilterGroup/FilterGroup.test.jsx",
+    "src/ui/molecules/TodoItems/TodoItems.component.jsx",
+    "src/ui/molecules/TodoItems/TodoItems.stories.js",
+    "src/ui/molecules/TodoItems/TodoItems.style.css",
+    "src/ui/molecules/TodoItems/TodoItems.test.jsx",
+    "src/ui/molecules/TodoItems/TodoItems.type.js",
+    "src/ui/molecules/TodoItems/TodoItems.type.test.js",
+    "src/ui/organisms/SiteHeader/SiteHeader.component.jsx",
+    "src/ui/organisms/SiteHeader/SiteHeader.stories.js",
+    "src/ui/organisms/SiteHeader/SiteHeader.style.css",
+    "src/ui/organisms/SiteHeader/SiteHeader.test.jsx",
+    "src/ui/organisms/TodoFilters/TodoFilters.component.jsx",
+    "src/ui/organisms/TodoFilters/TodoFilters.stories.js",
+    "src/ui/organisms/TodoFilters/TodoFilters.test.jsx",
+    "src/ui/organisms/TodoList/TodoList.component.jsx",
+    "src/ui/organisms/TodoList/TodoList.stories.js",
+    "src/ui/organisms/TodoList/TodoList.test.jsx",
+    "src/ui/skeletons/Skeleton/Skeletion.stories.js",
+    "src/ui/skeletons/Skeleton/Skeleton.component.jsx",
+    "src/ui/skeletons/Skeleton/Skeleton.style.css",
+    "src/ui/skeletons/Skeleton/Skeleton.test.jsx",
+    "src/ui/templates/Layout/Layout.component.jsx",
+    "src/ui/templates/Layout/Layout.style.css",
+    "src/ui/theme.css",
+    "src/utils/providers/AtomicProvider.jsx",
+    "src/utils/providers/TestProvider.jsx",
+    "src/utils/providers/TestProvider.test.jsx",
+    "vite.config.js"
+  ]
+}

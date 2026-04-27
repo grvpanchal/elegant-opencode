@@ -1,0 +1,33 @@
+{
+  "name": "@elegant/opencode",
+  "version": "0.1.0",
+  "description": "Elegant universal-architecture plugin for opencode. Decomposes feature requests into deterministic microtasks routed to small local models (Qwen3 32B / Gemma3 27B) with quality matching frontier models.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "elegant",
+    "atomic-design",
+    "redux",
+    "ollama",
+    "qwen3",
+    "gemma3"
+  ],
+  "author": "Gaurav Panchal",
+  "license": "MIT",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "scripts": {
+    "test": "node test/harness.test.js",
+    "stability": "node test/stability.test.js",
+    "demo:todo": "node scripts/run-todo-demo.js"
+  }
+}

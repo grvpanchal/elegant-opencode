@@ -1,0 +1,25 @@
+{
+  "$id": "entity-schema.schema.json",
+  "title": "Entity schema (pipeline seed)",
+  "description": "Shape returned by the schema-agent. Becomes the entity input passed to every downstream microtask.",
+  "type": "object",
+  "required": ["name", "slice", "operations"],
+  "additionalProperties": true,
+  "properties": {
+    "name":        { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]+$" },
+    "slice":       { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+    "appName":     { "type": "string" },
+    "projectName": { "type": "string" },
+    "itemsField":  { "type": "string" },
+    "currentField":{ "type": "string" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["create", "edit", "update", "toggle", "delete"]
+      }
+    }
+  }
+}

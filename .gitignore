@@ -1,0 +1,7 @@
+node_modules/
+demo-output/
+test/stab/
+test/out/
+test/comment-out/
+.DS_Store
+*.log

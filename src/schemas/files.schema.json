@@ -1,0 +1,18 @@
+{
+  "$id": "files.schema.json",
+  "title": "Microtask file map",
+  "description": "Universal envelope returned by every code-emitting microtask. The relPath set + structural invariants are validated separately per microtask in src/file-manifest.js.",
+  "type": "object",
+  "required": ["files"],
+  "additionalProperties": false,
+  "properties": {
+    "files": {
+      "type": "object",
+      "minProperties": 1,
+      "patternProperties": {
+        "^[A-Za-z0-9._/\\-]+$": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

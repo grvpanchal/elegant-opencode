@@ -129,9 +129,9 @@ Every push to `main` regenerates `build a todo app` through the harness and
 publishes the result to GitHub Pages — landing page, live React + Redux app,
 and the pipeline trace JSON — via `.github/workflows/deploy.yml`. The workflow
 runs `npm run demo:todo` (the deterministic same-orchestrator path: same
-emitters, same skills, same manifest validation, driven by a sim-LLM stub),
-then `vite build`s the 128 emitted files, and assembles a wrapper page with
-`scripts/build-pages.js`.
+emitters, same skills, same manifest validation, driven by a sim-LLM stub
+so CI builds are reproducible and free), then `vite build`s the 128 emitted
+files, and assembles a wrapper page with `scripts/build-pages.js`.
 
 To enable Pages on a fresh clone: repo *Settings → Pages → Source = GitHub
 Actions* (one-time setup), then push to `main` or trigger the workflow
@@ -145,13 +145,19 @@ npm run pages:build
 # serve gh-pages/ with any static server
 ```
 
-> **Plugin status.** The opencode plugin's LLM bridge in `src/index.js` calls
-> `client.task.invoke(...)`, which the current opencode SDK (1.14.x) replaced
-> with `client.session.prompt(...)`. Until the bridge is updated, the live
-> opencode-driven path (`/agent elegant-router > build a todo app`) returns
-> immediately from `elegant_build` instead of dispatching subagents through
-> the pipeline. The deterministic `npm run demo:todo` path runs the *same*
-> orchestrator and emitters end-to-end, which is what the deploy uses.
+The live opencode path (`opencode run "build a todo app"` or
+`/agent elegant-router > build a todo app` in the TUI) drives the same
+pipeline through real subagents on free Zen models — see
+[Install & use](#install--use). The plugin's LLM bridge dispatches each
+variable microtask through `client.session.create({parentID, title:"elegant:<task>"})`
+followed by `client.session.prompt({path:{id}, body:{agent, system, parts}})`,
+extracting concatenated `TextPart.text` as the model output. End-to-end
+verified: a full live run dispatched all 6 variable microtasks, recovered
+from one repair attempt on `ui-molecule`, and emitted the canonical 128
+files. Note that the manifest check (file set + structural anchors) does
+not catch every kind of small-model drift — a free-tier model may still
+emit semantically wrong import paths or value names, so CI uses the
+deterministic same-orchestrator path for reproducibility.
 
 ---
 
@@ -174,7 +180,7 @@ models so you can experiment with zero credentials and zero local GPU:
 | elegant-router    | `opencode/big-pickle`              |
 | organism-agent    | `opencode/big-pickle`              |
 | molecule-agent    | `opencode/minimax-m2.5-free`       |
-| atom-agent        | `opencode/nemotron-3-super-free`   |
+| atom-agent        | `opencode/gpt-5-nano`              |
 | container-agent   | `opencode/hy3-preview-free`        |
 | selectors-agent   | `opencode/gpt-5-nano`              |
 | schema-agent      | `opencode/gpt-5-nano`              |

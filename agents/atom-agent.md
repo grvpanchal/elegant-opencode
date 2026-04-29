@@ -1,7 +1,7 @@
 ---
 description: Emits the entity-specific domain atom (the smallest unit that renders one entity item). Encodes the ui-atom skill (single responsibility, framework-agnostic props, design-token integration).
 mode: subagent
-model: opencode/nemotron-3-super-free
+model: opencode/gpt-5-nano
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

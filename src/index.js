@@ -83,8 +83,11 @@ import { tool } from "@opencode-ai/plugin";
 async function emitProject({ result, $, directory }) {
   // Render real files from the structured outputs. Implementation lives in
   // src/code-emitter.js so it is easy to swap per-framework.
+  const target = process.env.ELEGANT_OUTPUT_DIR
+    ? (await import("node:path")).resolve(directory, process.env.ELEGANT_OUTPUT_DIR)
+    : directory;
   const { emit } = await import("./code-emitter.js");
-  await emit({ result, $, directory });
+  await emit({ result, $, directory: target });
 }
 
 export default ElegantPlugin;

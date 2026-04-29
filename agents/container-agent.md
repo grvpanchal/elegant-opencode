@@ -1,7 +1,7 @@
 ---
 description: Emits redux containers that wire selectors + dispatch into organism props. Encodes the server-container skill (smart vs dumb separation, data orchestration, reusability through separation).
 mode: subagent
-model: ollama/qwen3:32b-32k
+model: opencode/hy3-preview-free
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

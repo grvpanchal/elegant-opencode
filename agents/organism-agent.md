@@ -1,7 +1,7 @@
 ---
 description: Emits organisms that orchestrate molecules + skeletons across loading/error/empty/ready states. Encodes the ui-organism skill (feature encapsulation, state connection point, responsive orchestration).
 mode: subagent
-model: ollama/qwen3:32b-32k
+model: opencode/big-pickle
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

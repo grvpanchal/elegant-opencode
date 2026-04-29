@@ -1,7 +1,7 @@
 ---
 description: Extracts the entity schema from a plain-English feature spec. Output seeds every downstream microtask in the Elegant pipeline.
 mode: subagent
-model: ollama/qwen3:32b-32k
+model: opencode/gpt-5-nano
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

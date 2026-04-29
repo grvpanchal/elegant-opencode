@@ -123,6 +123,38 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 
 ---
 
+## Live demo
+
+Every push to `main` regenerates `build a todo app` through the harness and
+publishes the result to GitHub Pages — landing page, live React + Redux app,
+and the pipeline trace JSON — via `.github/workflows/deploy.yml`. The workflow
+runs `npm run demo:todo` (the deterministic same-orchestrator path: same
+emitters, same skills, same manifest validation, driven by a sim-LLM stub),
+then `vite build`s the 128 emitted files, and assembles a wrapper page with
+`scripts/build-pages.js`.
+
+To enable Pages on a fresh clone: repo *Settings → Pages → Source = GitHub
+Actions* (one-time setup), then push to `main` or trigger the workflow
+manually. Locally:
+
+```bash
+npm install
+npm run demo:todo
+(cd demo-output && npm install && npm run build)
+npm run pages:build
+# serve gh-pages/ with any static server
+```
+
+> **Plugin status.** The opencode plugin's LLM bridge in `src/index.js` calls
+> `client.task.invoke(...)`, which the current opencode SDK (1.14.x) replaced
+> with `client.session.prompt(...)`. Until the bridge is updated, the live
+> opencode-driven path (`/agent elegant-router > build a todo app`) returns
+> immediately from `elegant_build` instead of dispatching subagents through
+> the pipeline. The deterministic `npm run demo:todo` path runs the *same*
+> orchestrator and emitters end-to-end, which is what the deploy uses.
+
+---
+
 ## Install & use
 
 ```bash

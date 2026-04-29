@@ -129,22 +129,28 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 git clone https://github.com/grvpanchal/elegant-opencode
 cd elegant-opencode && npm install
 
-# Pull local models and bump context to 32k
-ollama pull qwen3:32b
-ollama pull gemma3:27b
-ollama run qwen3:32b
-> /set parameter num_ctx 32768
-> /save qwen3:32b-32k
-> /bye
-
-# Wire into opencode
-ln -s "$PWD/agents" .opencode/agents
-cp opencode.json /path/to/your/project/
-
 # In opencode TUI:
 > /agent elegant-router
 > build a todo app
 ```
+
+The shipped `opencode.json` wires the 7 agents to OpenCode Zen's free-tier
+models so you can experiment with zero credentials and zero local GPU:
+
+| Agent             | Model                              |
+|-------------------|------------------------------------|
+| elegant-router    | `opencode/big-pickle`              |
+| organism-agent    | `opencode/big-pickle`              |
+| molecule-agent    | `opencode/minimax-m2.5-free`       |
+| atom-agent        | `opencode/nemotron-3-super-free`   |
+| container-agent   | `opencode/hy3-preview-free`        |
+| selectors-agent   | `opencode/gpt-5-nano`              |
+| schema-agent      | `opencode/gpt-5-nano`              |
+
+These tiers are free at time of writing; OpenCode Zen rotates the free pool, so
+swap any retired ID with another from `opencode models`. To run on local
+Ollama instead, replace each agent's `model` with e.g. `ollama/qwen3:32b-32k`
+and add a matching `provider.ollama` block.
 
 ---
 

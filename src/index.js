@@ -1,8 +1,9 @@
 // Elegant plugin for opencode.
-// Registers the /elegant command + an `elegant_build` tool. When invoked, it
-// runs the universal-architecture pipeline, dispatching variable microtasks
-// to opencode subagents via ctx.client (Task tool) and emitting fixed
-// microtasks deterministically.
+// Registers an `elegant_build` tool. When invoked, it runs the
+// universal-architecture pipeline, dispatching variable microtasks to opencode
+// subagents via ctx.client (creating a child session per call and dispatching
+// the subagent through session.prompt) and emitting fixed microtasks
+// deterministically.
 
 import { runPipeline } from "./orchestrator.js";
 import { TERMINOLOGY } from "./terminology.js";
@@ -28,15 +29,52 @@ export const ElegantPlugin = async (ctx) => {
         async execute({ spec, entity }, agentCtx) {
           const entitySpec = { spec, hint: entity };
 
-          // The LLM bridge: call opencode subagents via the Task tool.
+          // LLM bridge: dispatch each variable microtask to its bound subagent.
+          // opencode 1.14 SDK shape:
+          //   1. session.create({ parentID, title }) → child Session
+          //   2. session.prompt({ path:{id}, body:{ agent, system, parts } })
+          //      runs the named subagent inside that child session and returns
+          //      { info: AssistantMessage, parts: Part[] }.
+          // We extract concatenated TextPart.text as the model output.
           const llm = async ({ agent, system, user, task }) => {
-            const out = await client.task.invoke({
-              agent,
-              prompt: `${system}\n\n---\n\n${user}`,
-              sessionID: agentCtx.sessionID,
-              metadata: { microtask: task }
+            const child = await client.session.create({
+              body: {
+                parentID: agentCtx.sessionID,
+                title: `elegant:${task}`
+              }
             });
-            return out.text || out.output || JSON.stringify(out);
+            if (child.error || !child.data?.id) {
+              throw new Error(
+                `session.create failed for "${task}": ${stringifyErr(child.error) || "no session id returned"}`
+              );
+            }
+            const childId = child.data.id;
+
+            const res = await client.session.prompt({
+              path: { id: childId },
+              body: {
+                agent,
+                system,
+                parts: [{ type: "text", text: user }]
+              }
+            });
+            if (res.error || !res.data) {
+              throw new Error(
+                `session.prompt failed for "${task}" (agent="${agent}"): ${stringifyErr(res.error) || "no data returned"}`
+              );
+            }
+
+            const text = (res.data.parts || [])
+              .filter((p) => p && p.type === "text" && typeof p.text === "string")
+              .map((p) => p.text)
+              .join("");
+            if (!text) {
+              const seenTypes = (res.data.parts || []).map((p) => p?.type).join(",");
+              throw new Error(
+                `subagent "${agent}" for "${task}" returned no text parts (saw: ${seenTypes || "none"})`
+              );
+            }
+            return text;
           };
 
           const trace = [];
@@ -46,15 +84,16 @@ export const ElegantPlugin = async (ctx) => {
             onTrace: (t) => trace.push(t)
           });
 
-          // Materialise to disk through opencode's existing write tool so the
-          // user gets a real project, not just JSON.
           await emitProject({ result, $, directory });
 
+          const okCount = trace.filter((t) => t.ok).length;
           return {
-            summary: `Elegant pipeline complete. ${trace.filter((t) => t.ok).length}/${trace.length} microtasks succeeded.`,
-            trace,
-            terminology: Object.keys(TERMINOLOGY),
-            outputs: Object.keys(result)
+            output: `Elegant pipeline complete. ${okCount}/${trace.length} microtask events succeeded; ${Object.keys(result).length} microtasks ran across ${TERMINOLOGY ? Object.keys(TERMINOLOGY).length : "?"} skill bindings. Files written under ${process.env.ELEGANT_OUTPUT_DIR || directory}.`,
+            metadata: {
+              trace,
+              terminology: Object.keys(TERMINOLOGY),
+              outputs: Object.keys(result)
+            }
           };
         }
       })
@@ -80,11 +119,25 @@ export const ElegantPlugin = async (ctx) => {
 // Expose `tool` from the opencode plugin SDK.
 import { tool } from "@opencode-ai/plugin";
 
+function stringifyErr(err) {
+  if (!err) return "";
+  if (typeof err === "string") return err;
+  if (err.message) return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
 async function emitProject({ result, $, directory }) {
   // Render real files from the structured outputs. Implementation lives in
   // src/code-emitter.js so it is easy to swap per-framework.
+  const target = process.env.ELEGANT_OUTPUT_DIR
+    ? (await import("node:path")).resolve(directory, process.env.ELEGANT_OUTPUT_DIR)
+    : directory;
   const { emit } = await import("./code-emitter.js");
-  await emit({ result, $, directory });
+  await emit({ result, $, directory: target });
 }
 
 export default ElegantPlugin;

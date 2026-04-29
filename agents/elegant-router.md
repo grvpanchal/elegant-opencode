@@ -1,7 +1,7 @@
 ---
 description: Primary Elegant orchestrator. Decomposes a feature spec into universal-architecture microtasks and delegates to terminology subagents.
 mode: primary
-model: ollama/qwen3:32b-32k
+model: opencode/big-pickle
 tools:
   task: true
   bash: true

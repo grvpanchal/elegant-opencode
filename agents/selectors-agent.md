@@ -1,7 +1,7 @@
 ---
 description: Emits state selectors for the entity slice. Encodes the state-selectors skill (computed properties, memoization, state-shape abstraction).
 mode: subagent
-model: ollama/qwen3:32b-32k
+model: opencode/gpt-5-nano
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

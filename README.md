@@ -2,7 +2,7 @@
 
 An [opencode](https://opencode.ai) plugin that turns the [Universal Frontend Architecture](https://elegantfrontend.training/blog/universal-frontend-architecture) into a microtask harness for **small local models**. The goal: run on **Qwen3 32B** or **Gemma3 27B** via Ollama and produce code with the same quality as a frontier model, by reducing every coding decision to a tightly-scoped microtask the model cannot get wrong.
 
-This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth.
+This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth. A vendored copy of the 14 skills referenced by the pipeline lives in this repo at `skills/` so you can iterate on them locally; override with `ELEGANT_SKILLS_ROOT` to point elsewhere.
 
 ---
 
@@ -97,6 +97,7 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 @elegant/opencode/
 ├── opencode.json
 ├── agents/                       # 7 .md files (1 router + 6 variable-microtask agents)
+├── skills/                       # 14 vendored SKILL.md files from grvpanchal/elegant
 ├── src/
 │   ├── index.js                  # opencode plugin entrypoint
 │   ├── terminology.js            # 21 microtasks, dependency graph, fixed vs variable
@@ -122,28 +123,72 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 
 ---
 
+## Live demo
+
+Every push to `main` regenerates `build a todo app` through the harness and
+publishes the result to GitHub Pages — landing page, live React + Redux app,
+and the pipeline trace JSON — via `.github/workflows/deploy.yml`. The workflow
+runs `npm run demo:todo` (the deterministic same-orchestrator path: same
+emitters, same skills, same manifest validation, driven by a sim-LLM stub
+so CI builds are reproducible and free), then `vite build`s the 128 emitted
+files, and assembles a wrapper page with `scripts/build-pages.js`.
+
+To enable Pages on a fresh clone: repo *Settings → Pages → Source = GitHub
+Actions* (one-time setup), then push to `main` or trigger the workflow
+manually. Locally:
+
+```bash
+npm install
+npm run demo:todo
+(cd demo-output && npm install && npm run build)
+npm run pages:build
+# serve gh-pages/ with any static server
+```
+
+The live opencode path (`opencode run "build a todo app"` or
+`/agent elegant-router > build a todo app` in the TUI) drives the same
+pipeline through real subagents on free Zen models — see
+[Install & use](#install--use). The plugin's LLM bridge dispatches each
+variable microtask through `client.session.create({parentID, title:"elegant:<task>"})`
+followed by `client.session.prompt({path:{id}, body:{agent, system, parts}})`,
+extracting concatenated `TextPart.text` as the model output. End-to-end
+verified: a full live run dispatched all 6 variable microtasks, recovered
+from one repair attempt on `ui-molecule`, and emitted the canonical 128
+files. Note that the manifest check (file set + structural anchors) does
+not catch every kind of small-model drift — a free-tier model may still
+emit semantically wrong import paths or value names, so CI uses the
+deterministic same-orchestrator path for reproducibility.
+
+---
+
 ## Install & use
 
 ```bash
 git clone https://github.com/grvpanchal/elegant-opencode
 cd elegant-opencode && npm install
 
-# Pull local models and bump context to 32k
-ollama pull qwen3:32b
-ollama pull gemma3:27b
-ollama run qwen3:32b
-> /set parameter num_ctx 32768
-> /save qwen3:32b-32k
-> /bye
-
-# Wire into opencode
-ln -s "$PWD/agents" .opencode/agents
-cp opencode.json /path/to/your/project/
-
 # In opencode TUI:
 > /agent elegant-router
 > build a todo app
 ```
+
+The shipped `opencode.json` wires the 7 agents to OpenCode Zen's free-tier
+models so you can experiment with zero credentials and zero local GPU:
+
+| Agent             | Model                              |
+|-------------------|------------------------------------|
+| elegant-router    | `opencode/big-pickle`              |
+| organism-agent    | `opencode/big-pickle`              |
+| molecule-agent    | `opencode/minimax-m2.5-free`       |
+| atom-agent        | `opencode/gpt-5-nano`              |
+| container-agent   | `opencode/hy3-preview-free`        |
+| selectors-agent   | `opencode/gpt-5-nano`              |
+| schema-agent      | `opencode/gpt-5-nano`              |
+
+These tiers are free at time of writing; OpenCode Zen rotates the free pool, so
+swap any retired ID with another from `opencode models`. To run on local
+Ollama instead, replace each agent's `model` with e.g. `ollama/qwen3:32b-32k`
+and add a matching `provider.ollama` block.
 
 ---
 

@@ -1,181 +1,124 @@
 ---
 name: state-selectors
-description: Selector functions for reading state — Reselect/createSelector memoisation, input-selector composition, parameterised selector factories, and colocating selectors with slices. Use when extracting state into components, avoiding redundant re-renders from filtered lists, or abstracting state shape behind `selectXxx` helpers.
-when_to_use: Writing `selectXxx` helpers colocated with slices; memoising derived data (filtered/sorted lists, aggregated stats) with createSelector; factoring parameterised selectors (selectTodoById); replacing raw `state.x.y` access in components.
+description: Selector functions for the chota-react-saga template — colocated with each slice, return derived view-data from the saga state shape (isLoading/isContentLoading/isActionLoading/error/<items>/<current>), filter/sort projections that combine slices (e.g. visibleTodos × selectedFilter).
+when_to_use: Writing `selectXxx`/`getVisibleXxx` helpers colocated with a slice; deriving filtered or aggregated lists from `<items>` and the filter slice; replacing raw `state.x.y` access in containers.
 paths:
-  - "**/store/**/*.{js,ts}"
-  - "**/selectors/**/*.{js,ts}"
-  - "**/*Selectors*.{js,ts}"
-  - "**/*slice*.{js,ts}"
+  - "**/state/**/*.selectors.{js,ts}"
 ---
 
-# Selectors
+# Selectors (Saga template)
 
-## What are Selectors?
+## What is a Selector?
 
-Selectors are pure functions that extract and compute derived data from state. They're the "read layer" between raw Redux state and components—transforming, filtering, and memoizing data so components get exactly what they need without re-computing on every render.
+A selector is a pure function `(state) => derivedValue` that hides the state shape from consumers. Containers call selectors with `useSelector(selector)`; components only see the projected view-data, never the slice's internal flags or normalisation tricks.
 
 ## Key Principles
 
-1. **Computed Properties**: Selectors derive data (filter active todos, calculate totals) from raw state. Never store derived data—compute it with selectors.
+1. **Colocate selectors with their slice.** `<slice>.selectors.js` lives next to `<slice>.reducer.js`. Cross-slice selectors live where the *primary* slice lives (e.g. `getVisibleTodos` lives in `todo.selectors.js` because that's where the items list lives, even though it also reads `filters`).
 
-2. **Memoization**: Reselect's `createSelector` caches results. Expensive computations (filtering 10,000 items) only run when inputs change.
+2. **One selector per derived shape.** A selector returns either a primitive (`isLoading`), a slice ref (`state.todo`), a list (`state.todo.todoItems`), or a derived projection (`getVisibleTodos`). Don't fuse unrelated derivations into one selector.
 
-3. **State Shape Abstraction**: Components use selectors, not raw state paths. When you refactor state structure, update selectors—not every component.
+3. **Pass-through selectors are not boilerplate, they're API.** `getTodoItems = (state) => state.todo.todoItems` looks redundant but it's the contract: tomorrow you can normalise the slice or rename the field, and only this file changes.
+
+4. **Cross-slice selectors take both slices as args.** The `getVisibleTodos(todoSlice, filterId)` pattern keeps the selector pure and easily testable; the container picks the slices via `useSelector` and passes them in.
+
+5. **Memoise only when measured.** Plain selectors are cheap. Reach for `createSelector` (reselect) when a selector returns a NEW array/object on every call AND that result is consumed by a memoised component — otherwise you'll see needless re-renders.
 
 ## Best Practices
 
 ✅ **DO**:
-- Use `createSelector` from Reselect for derived data
-- Start with simple input selectors, compose complex ones
-- Memoize expensive computations
-- Colocate selectors with slices
-- Name selectors `selectXxx`
+- Name boolean flag selectors `is…` (`isLoading`, `isContentLoading`).
+- Name list selectors `get<Plural>` and projections `get<Verb><Plural>` (e.g. `getVisibleTodos`).
+- Keep selectors stateless: no module-level caches; if you need memoisation, use reselect.
 
 ❌ **DON'T**:
-- Access state directly in components (`state.todos.items`)
-- Compute derived data in components
-- Create selectors that return new objects every time
-- Skip memoization for filtered/sorted lists
-- Make selectors impure
+- Don't fetch inside selectors. Sagas do that.
+- Don't read `localStorage` or `Date.now()` from a selector. Tests will fail nondeterministically.
+- Don't return `state` itself — projects always start one level in (`state.todo`).
 
 ## Code Patterns
 
-### Basic Input Selectors
+### Slice selectors (`todo.selectors.js`)
 
 ```javascript
-// Simple extraction - no memoization needed
-export const selectTodos = (state) => state.todos.items;
-export const selectTodosLoading = (state) => state.todos.loading;
-export const selectFilter = (state) => state.todos.filter;
-export const selectSearchTerm = (state) => state.todos.searchTerm;
-```
+// Saga state shape:
+//   { isLoading, isActionLoading, isContentLoading, error,
+//     todoItems[], currentTodoItem, previousStateTodoItems? }
 
-### Memoized Derived Selectors
+// Pass-through projections — the API for downstream consumers.
+export const getTodo = (state) => state.todo;
+export const getTodoItems = (state) => state.todo.todoItems;
+export const getCurrentTodoItem = (state) => state.todo.currentTodoItem;
 
-```javascript
-import { createSelector } from 'reselect';
+// Lifecycle flags (the UI picks one to render against).
+export const isContentLoading = (state) => state.todo.isContentLoading;
+export const isActionLoading  = (state) => state.todo.isActionLoading;
+export const getError         = (state) => state.todo.error;
 
-// Memoized: only recalculates when inputs change
-export const selectFilteredTodos = createSelector(
-  [selectTodos, selectFilter, selectSearchTerm],
-  (todos, filter, searchTerm) => {
-    let filtered = todos;
-    
-    // Filter by status
-    if (filter === 'active') {
-      filtered = filtered.filter(t => !t.completed);
-    } else if (filter === 'completed') {
-      filtered = filtered.filter(t => t.completed);
-    }
-    
-    // Filter by search
-    if (searchTerm) {
-      filtered = filtered.filter(t =>
-        t.text.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    return filtered;
+// Cross-slice: takes the slice + the filter id, returns the view list.
+// (the container picks both via useSelector and calls this in render).
+export const getVisibleTodos = (todoSlice, filterId) => {
+  const items = todoSlice.todoItems;
+  switch (filterId) {
+    case "SHOW_COMPLETED": return items.filter((t) => t.completed);
+    case "SHOW_ACTIVE":    return items.filter((t) => !t.completed);
+    case "SHOW_ALL":
+    default:               return items;
   }
-);
-
-// Composed selectors
-export const selectCompletedCount = createSelector(
-  [selectTodos],
-  (todos) => todos.filter(t => t.completed).length
-);
-
-export const selectTodoStats = createSelector(
-  [selectTodos],
-  (todos) => ({
-    total: todos.length,
-    completed: todos.filter(t => t.completed).length,
-    active: todos.filter(t => !t.completed).length
-  })
-);
+};
 ```
 
-### Parameterized Selectors
+### Filter slice selectors (`filters.selectors.js`)
 
 ```javascript
-// Selector factory for passing arguments
-export const makeSelectTodoById = () => createSelector(
-  [selectTodos, (_, todoId) => todoId],
-  (todos, todoId) => todos.find(t => t.id === todoId)
-);
+// The filter slice is an array of { id, label, selected }.
+export const getSelectedFilter = (state) =>
+  state.filters.find((f) => f.selected) || state.filters[0];
 
-// Usage in component
-const selectTodoById = useMemo(makeSelectTodoById, []);
-const todo = useSelector(state => selectTodoById(state, todoId));
+export const getFilters = (state) => state.filters;
 ```
 
-### RTK Integration
-
-```javascript
-// todosSlice.js
-import { createSlice, createSelector } from '@reduxjs/toolkit';
-
-const todosSlice = createSlice({
-  name: 'todos',
-  initialState: { items: [], filter: 'all' },
-  reducers: { /* ... */ }
-});
-
-// Colocated selectors
-export const selectTodosState = (state) => state.todos;
-
-export const selectAllTodos = createSelector(
-  [selectTodosState],
-  (todosState) => todosState.items
-);
-
-export const selectVisibleTodos = createSelector(
-  [selectAllTodos, selectTodosState],
-  (todos, { filter }) => {
-    switch (filter) {
-      case 'active': return todos.filter(t => !t.completed);
-      case 'completed': return todos.filter(t => t.completed);
-      default: return todos;
-    }
-  }
-);
-```
-
-### Usage in Components
+### Calling from a container
 
 ```jsx
-import { useSelector } from 'react-redux';
-import { selectFilteredTodos, selectTodoStats } from './todosSelectors';
+import { useSelector } from "react-redux";
+import { getSelectedFilter } from "../state/filters/filters.selectors";
+import { getVisibleTodos } from "../state/todo/todo.selectors";
 
-function TodoList() {
-  // Memoized selector - only re-renders when filtered list changes
-  const todos = useSelector(selectFilteredTodos);
-  const { total, completed } = useSelector(selectTodoStats);
-  
-  return (
-    <div>
-      <p>{completed} of {total} completed</p>
-      {todos.map(todo => <TodoItem key={todo.id} todo={todo} />)}
-    </div>
-  );
-}
+const selectedFilter = useSelector(getSelectedFilter);
+const todoData = useSelector((state) =>
+  getVisibleTodos(state.todo, selectedFilter.id)
+);
+```
+
+### When to add `createSelector`
+
+```javascript
+// Reach for reselect when a derived projection is hot AND consumed by
+// a memoised component. Most slices don't need this.
+import { createSelector } from "reselect";
+
+const selectTodo = (state) => state.todo;
+const selectFilter = (state, filterId) => filterId;
+
+export const makeGetVisibleTodos = createSelector(
+  [selectTodo, selectFilter],
+  (todoSlice, filterId) => /* …same logic as above… */
+);
 ```
 
 ## Related Terminologies
 
-- **Store** (State) - Selectors read from store
-- **Reducer** (State) - Produces state selectors read
-- **Container** (Server) - Uses selectors for data
-- **Props** (UI) - Selectors provide component props
+- **Reducer** — owns the state shape selectors project from.
+- **Container** — the only call-site of `useSelector(selector)`.
+- **Filters** — the cross-slice friend of `getVisibleTodos`.
 
 ## Quality Gates
 
-- [ ] Input selectors for raw state paths
-- [ ] `createSelector` for derived data
-- [ ] Memoization for expensive computations
-- [ ] Selectors colocated with slices
-- [ ] No direct state access in components
-- [ ] Naming convention (`selectXxx`)
+- [ ] One selectors file per slice; no mixing.
+- [ ] Pass-through selectors exist for every consumed field.
+- [ ] No side effects (no fetch, no `Math.random`, no `Date.now`).
+- [ ] Cross-slice selectors take slice args, not `state`.
+- [ ] `createSelector` only used where memoisation is measurably needed.
 
-**Source**: `/docs/state/selectors.md`
+**Source**: `templates/chota-react-saga/src/state/todo/todo.selectors.js`, `filters.selectors.js`

@@ -19,7 +19,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["create", "edit", "update", "toggle", "delete"]
+        "enum": ["create", "read", "edit", "update", "toggle", "delete"]
       }
     },
     "queryField":         { "type": "string" },

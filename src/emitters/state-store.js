@@ -1,20 +1,19 @@
-// state-store skill — root reducer + store wiring.
+// state-store skill — root reducer + store + saga middleware (saga-shaped).
 //
-// Skill principles:
-//   • "Single source of truth" — one createStore for the whole app
-//   • "State is read-only" — store handed to components via Provider
-//   • "Pure reducer updates" — combineReducers composes domain slices
-//
-// Emits three files:
+// Emits three files (saga template shape):
 //   src/state/rootReducer.js        combineReducers({ entity, filters, config })
-//   src/state/index.js              createStore(reducer, devtools)
+//   src/state/index.js              createStore + applyMiddleware(sagaMiddleware) +
+//                                   composeWithDevTools + sagaMiddleware.run(rootSaga)
 //   src/state/rootReducer.test.js   covers init + combination of slices
+//
+// rootSagas.js is emitted by the state-root-sagas microtask.
 
 export function emit(entity) {
   const slice = entity.slice;
   const Slice = entity.name;
 
-  const rootReducer = `/* istanbul ignore file */
+  const rootReducer =
+`/* istanbul ignore file */
 import { combineReducers } from "redux";
 import ${slice} from "./${slice}/${slice}.reducer";
 import filters from "./filters/filters.reducer";
@@ -27,28 +26,38 @@ export default combineReducers({
 });
 `;
 
-  const index = `import { createStore } from "redux";
+  const index =
+`import { composeWithDevTools } from '@redux-devtools/extension'
+import { createStore, applyMiddleware } from 'redux'
+import createSagaMiddleware from "redux-saga";
 
 import reducer from "./rootReducer";
+import sagas from "./rootSagas";
 
-const store = createStore(
-  reducer,
-  window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()
-);
+// create the saga middleware
+const sagaMiddleware = createSagaMiddleware();
+// mount it on the Store
+const enhancer = applyMiddleware(sagaMiddleware)
+const enhancers = [enhancer];
+const composedEnhancers = composeWithDevTools(...enhancers)
+
+const store = createStore(reducer, composedEnhancers);
+
+// then run the saga
+sagaMiddleware.run(sagas);
 
 export default store;
 `;
 
-  const test = `import rootReducer from './rootReducer';
-import initial${Slice}State from './${slice}/${slice}.initial';
+  const test =
+`import rootReducer from './rootReducer';
+import intial${Slice}State from './${slice}/${slice}.initial';
 import initialFiltersState from './filters/filters.initial';
 import initialConfigState from './config/config.initial';
 
 describe('Root Reducer', () => {
   it('returns combined state with all slices on undefined input', () => {
-    const action = { type: '@@INIT' };
-    const result = rootReducer(undefined, action);
-    
+    const result = rootReducer(undefined, { type: '@@INIT' });
     expect(result).toBeDefined();
     expect(result.${slice}).toBeDefined();
     expect(result.filters).toBeDefined();
@@ -56,41 +65,18 @@ describe('Root Reducer', () => {
   });
 
   it('combines ${slice} slice correctly', () => {
-    const initialState = { ${slice}: initial${Slice}State };
-    const action = { type: 'UNKNOWN' };
-    
-    const result = rootReducer(initialState, action);
-    expect(result.${slice}).toBe(initial${Slice}State);
+    const result = rootReducer({ ${slice}: intial${Slice}State }, { type: 'UNKNOWN' });
+    expect(result.${slice}).toBe(intial${Slice}State);
   });
 
   it('combines filters slice correctly', () => {
-    const initialState = { filters: initialFiltersState };
-    const action = { type: 'UNKNOWN' };
-    
-    const result = rootReducer(initialState, action);
+    const result = rootReducer({ filters: initialFiltersState }, { type: 'UNKNOWN' });
     expect(result.filters).toBe(initialFiltersState);
   });
 
   it('combines config slice correctly', () => {
-    const initialState = { config: initialConfigState };
-    const action = { type: 'UNKNOWN' };
-    
-    const result = rootReducer(initialState, action);
+    const result = rootReducer({ config: initialConfigState }, { type: 'UNKNOWN' });
     expect(result.config).toBe(initialConfigState);
-  });
-
-  it('maintains separate state for each slice', () => {
-    const initialState = {
-      ${slice}: initial${Slice}State,
-      filters: initialFiltersState,
-      config: initialConfigState,
-    };
-    
-    const action = { type: '@@INIT' };
-    const result = rootReducer(initialState, action);
-    
-    expect(result.${slice}).not.toBe(result.filters);
-    expect(result.config).not.toBe(result.${slice});
   });
 });
 `;

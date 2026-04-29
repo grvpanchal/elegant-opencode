@@ -1,36 +1,38 @@
-// state-actions skill — type-constant emitter.
+// state-actions skill — type-constant emitter (saga-shaped).
 //
-// Skill principle: "Define type constants to prevent typos" + "Use
-// descriptive type names ('todos/add')". The elegant convention used by the
-// chota-react-redux template is UPPER_SNAKE_CASE constants, one per file
-// (`{slice}.type.js`). This emitter encodes that pattern and projects it
-// onto entity.operations.
+// Saga template convention: each async operation has THREE phases —
+//   <OP>_<ENTITY>          (REQUEST: dispatched by container/UI, watched by saga)
+//   <OP>_<ENTITY>_SUCCESS  (PUT by saga on resolution)
+//   <OP>_<ENTITY>_ERROR    (PUT by saga on rejection)
+// Sync operations (e.g. EDIT) emit only the bare REQUEST type.
+//
+// `entity.syncOps` lists the sync-only operation verbs. All others get the
+// full 3-phase set.
 
 import { actionType } from "./_naming.js";
 
 export function emit(entity) {
-  const slice = entity.slice;            // e.g. "todo"
-  const E     = entity.name.toUpperCase();
-  const ops   = entity.operations;       // e.g. ["create","edit","update","toggle","delete"]
+  const slice = entity.slice;
+  const ops = entity.operations;
+  const syncOps = new Set(entity.syncOps || []);
 
-  // Type constants are emitted in the entity's declared operation order.
-  const lines = ops
-    .map((op) => `export const ${actionType(op, entity.name)} = "${actionType(op, entity.name)}"`)
+  // Compose the full type list. Sync ops contribute one type; async ops three.
+  const typesPerOp = (op) => {
+    const base = actionType(op, entity.name);
+    if (syncOps.has(op)) return [base];
+    return [base, `${base}_SUCCESS`, `${base}_ERROR`];
+  };
+  const allTypes = ops.flatMap(typesPerOp);
+
+  const types = allTypes.map((t) => `export const ${t} = "${t}"`).join("\n");
+
+  const importList = allTypes.map((t) => `  ${t},`).join("\n");
+  const testCases = allTypes
+    .map((t) => `  it('exports ${t}', () => { expect(${t}).toBe('${t}'); });`)
     .join("\n");
 
-  // Reference template ends type file WITHOUT trailing newline (no \n).
-  const types = lines;
-
-  const testCases = ops
-    .map((op) => {
-      const C = actionType(op, entity.name);
-      return `  it('exports ${C} constant', () => {\n    expect(${C}).toBe('${C}');\n  });`;
-    })
-    .join("\n\n");
-
-  const importList = ops.map((op) => `  ${actionType(op, entity.name)},`).join("\n");
-
-  const test = `import {
+  const test =
+`import {
 ${importList}
 } from './${slice}.type';
 

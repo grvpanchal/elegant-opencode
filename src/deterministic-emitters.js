@@ -43,6 +43,10 @@ import * as uiMolecule      from "./emitters/ui-molecule.js";
 import * as uiOrganism      from "./emitters/ui-organism.js";
 import * as container       from "./emitters/container.js";
 import * as page            from "./emitters/page.js";
+import * as stateOperations from "./emitters/state-operations.js";
+import * as stateHelper     from "./emitters/state-helper.js";
+import * as stateRootSagas  from "./emitters/state-root-sagas.js";
+import * as utilsApi        from "./emitters/utils-api.js";
 
 // fetch-card overrides
 import * as fcStateTypes    from "./emitters/fetch-card/state-types.js";
@@ -79,7 +83,11 @@ const CRUD_LIST_EMITTERS = {
   "ui-molecule":      uiMolecule,
   "ui-organism":      uiOrganism,
   "container":        container,
-  "page":             page
+  "page":             page,
+  "state-helper":     stateHelper,
+  "state-operations": stateOperations,
+  "state-root-sagas": stateRootSagas,
+  "utils-api":        utilsApi
 };
 
 // fetch-card overrides; missing keys fall back to crud-list.

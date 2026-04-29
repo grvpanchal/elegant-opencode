@@ -333,7 +333,8 @@ ${defaultState}
   }).join("\n");
 
   out[`src/containers/${ListContainer}.jsx`] =
-`import ${ListOrg} from "../ui/organisms/${ListOrg}/${ListOrg}.component";
+`import { useEffect } from "react";
+import ${ListOrg} from "../ui/organisms/${ListOrg}/${ListOrg}.component";
 import { useDispatch, useSelector } from "react-redux";
 import {
 ${importLines}
@@ -347,6 +348,12 @@ export default function ${ListContainer}() {
   const ${dataProp} = useSelector((state) =>
     getVisible${Slice}s(state.${slice}, selectedFilter.id)
   );
+
+  // Saga-template pattern: dispatch the READ request on mount; the saga
+  // worker calls the API and dispatches READ_*_SUCCESS / _ERROR back.
+  useEffect(() => {
+    dispatch(read${Slice}());
+  }, [dispatch]);
 
   const events = {
 ${eventLines}

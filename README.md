@@ -27,7 +27,7 @@ one entry to `ARCHETYPES` in `src/terminology.js`, one builder map in
 
 ## Why a skill-driven harness (not a fixture)
 
-Earlier iterations shipped a copy of the chota-react-redux template and edited the variable parts. **That is the wrong technique.** The skills are the contract; the fixture is just one valid output of the contract.
+Earlier iterations shipped a copy of a static template and edited the variable parts. **That is the wrong technique.** The skills are the contract; the fixture is just one valid output of the contract.
 
 This rewrite removes the fixture entirely. Every microtask is bound to one `SKILL.md` whose Code Patterns + Key Principles are encoded as a pure JS emitter (for fixed microtasks) or a tightly-prompted LLM agent (for variable microtasks). Both return the same envelope:
 
@@ -35,13 +35,13 @@ This rewrite removes the fixture entirely. Every microtask is bound to one `SKIL
 { "files": { "<relPath>": "<source>" } }
 ```
 
-The pipeline IS the architecture. The chota-react-redux template happens to be one byte-identical output of the pipeline because it is the reference embodiment of the same skills.
+The pipeline IS the architecture. The crud-list archetype's reference embodiment is **chota-react-saga** — async CRUD with redux-saga middleware, three-phase action lifecycle (REQUEST / SUCCESS / ERROR), per-slice operations.js + helper.js + a localStorage-backed utils/api.js. That template is the source-of-truth for what the emitters produce; small models get the same skill prompts the deterministic emitters were derived from. Switching to chota-react-rtk or chota-vue-pinia later is a matter of swapping the emitter set, not the orchestrator.
 
 ---
 
 ## The crud-list pipeline
 
-21 microtasks bound to skills. 15 fixed (zero LLM tokens), 6 variable (small LLM, schema- and manifest-locked). The fetch-card pipeline shares the
+25 microtasks bound to skills. 19 fixed (zero LLM tokens), 6 variable (small LLM, schema- and manifest-locked). The fetch-card pipeline shares the
 same shape; it swaps `filters-slice` for `ajax-middleware` and the entity-
 shaped state + UI emitters for ajax-flavoured ones.
 
@@ -50,14 +50,18 @@ shaped state + UI emitters for ajax-flavoured ones.
 | `entity-schema` | — | LLM | (seed; entity object) |
 | `ui-theme` | ui-theme | fixed | 5 |
 | `app-shell` | server-app-shell | fixed | 9 |
-| `state-types` | state-actions | fixed | 1 |
+| `state-types` | state-actions | fixed | 2 |
 | `state-initial` | state-reducer | fixed | 1 |
 | `state-actions` | state-actions | fixed | 2 |
+| `state-helper` | state-saga | fixed | 2 |
 | `state-reducer` | state-reducer | fixed | 2 |
 | **`state-selectors`** | state-selectors | LLM | 2 |
 | `filters-slice` | state-crud | fixed | 8 |
 | `config-slice` | state-crud | fixed | 8 |
-| `state-store` | state-store | fixed | 1 |
+| `utils-api` | server-api | fixed | 2 |
+| `state-operations` | state-saga | fixed | 2 |
+| `state-root-sagas` | state-saga | fixed | 2 |
+| `state-store` | state-store | fixed | 3 |
 | `atomic-provider` | server-app-shell | fixed | 2 |
 | `ui-base-atoms` | ui-atom | fixed | 22 |
 | `ui-context-atoms` | ui-atom | fixed | 18 |
@@ -89,12 +93,12 @@ Outputs are validated by Ajv (envelope shape) AND by the per-microtask manifest 
 |---|---|
 | Runs | 100 |
 | Hard failures | 0 |
-| File-tree byte-identical across runs | yes (sha256 `ac00e9a7…6dd9d955`) |
-| LLM calls per run | 5 of 21 (24%) |
-| Deterministic emitter calls per run | 15 of 21 (71%) |
-| Repair attempts triggered | 870 |
+| File-tree byte-identical across runs | yes (sha256 `89ad6748…eae5762d`) |
+| LLM calls per run | 5 of 25 (20%) |
+| Deterministic emitter calls per run | 19 of 25 (76%) |
+| Repair attempts triggered | ~870 |
 | Recovered after repair (≤3 attempts) | all |
-| Generated files per run | 128 (matches the `chota-react-redux` template byte-for-byte) |
+| Generated files per run | 136 (saga-shaped: chota-react-saga template; the deterministic emitters are derived from that template's source-of-truth) |
 
 ```
 $ N=100 node test/stability.test.js
@@ -102,13 +106,13 @@ $ N=100 node test/stability.test.js
   "runs": 100,
   "failures": 0,
   "stableTreeAcrossRuns": true,
-  "treeHash": "ac00e9a75dc6860c40031af734ecb04d9d16d68baa83c65dc819289a6dd9d955",
-  "perRunFiles": 128
+  "treeHash": "89ad674880014d20735965fd371e6d6004fb36327a1e3b17fe123a35eae5762d",
+  "perRunFiles": 136
 }
 STABLE
 ```
 
-A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree with the entity name woven through every layer (verified by `test/different-entity.test.js`).
+A non-Todo entity (`Comment`, no `toggle` op) projects to a saga-shaped tree with the entity name woven through every layer (verified by `test/different-entity.test.js`).
 
 ---
 
@@ -118,10 +122,10 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 @elegant/opencode/
 ├── opencode.json
 ├── agents/                       # 7 .md files (1 router + 6 variable-microtask agents)
-├── skills/                       # 14 vendored SKILL.md files from grvpanchal/elegant
+├── skills/                       # 16 vendored SKILL.md files from grvpanchal/elegant
 ├── src/
 │   ├── index.js                  # opencode plugin entrypoint
-│   ├── terminology.js            # 21 microtasks, dependency graph, fixed vs variable
+│   ├── terminology.js            # 25 microtasks (crud-list), dependency graph, fixed vs variable
 │   ├── file-manifest.js          # required relPath set + structural invariants per microtask
 │   ├── skills-loader.js          # reads grvpanchal/elegant SKILL.md + compacts
 │   ├── exemplars.js              # one in-repo exemplar per variable microtask

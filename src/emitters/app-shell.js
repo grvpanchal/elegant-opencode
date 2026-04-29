@@ -81,11 +81,13 @@ export default defineConfig({
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@redux-devtools/extension": "^4.0.0",
     "chota": "^0.9.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-redux": "^9.2.0",
-    "redux": "^5.0.1"
+    "redux": "^5.0.1",
+    "redux-saga": "^1.4.2"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.3.5",

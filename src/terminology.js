@@ -162,10 +162,30 @@ const CRUD_LIST = {
     variability: "fixed",
     dependsOn: []
   },
+  "state-helper": {
+    layer: "state", skill: "state-saga", agent: null,
+    variability: "fixed",
+    dependsOn: ["entity-schema"]
+  },
+  "state-operations": {
+    layer: "state", skill: "state-saga", agent: null,
+    variability: "fixed",
+    dependsOn: ["state-actions", "state-helper", "utils-api"]
+  },
+  "state-root-sagas": {
+    layer: "state", skill: "state-saga", agent: null,
+    variability: "fixed",
+    dependsOn: ["state-operations"]
+  },
+  "utils-api": {
+    layer: "server", skill: "server-api", agent: null,
+    variability: "fixed",
+    dependsOn: ["entity-schema"]
+  },
   "state-store": {
     layer: "state", skill: "state-store", agent: null,
     variability: "fixed",
-    dependsOn: ["state-reducer", "filters-slice", "config-slice"]
+    dependsOn: ["state-reducer", "filters-slice", "config-slice", "state-root-sagas"]
   }
 };
 
@@ -196,10 +216,14 @@ const ARCHETYPES = {
       "state-types",
       "state-initial",
       "state-actions",
+      "state-helper",
       "state-reducer",
       "state-selectors",
       "filters-slice",
       "config-slice",
+      "utils-api",
+      "state-operations",
+      "state-root-sagas",
       "state-store",
       "atomic-provider",
       "ui-base-atoms",

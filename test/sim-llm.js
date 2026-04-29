@@ -37,7 +37,11 @@ const TODO_ENTITY = {
   kind: "crud-list",
   itemsField: "todoItems",
   currentField: "currentTodoItem",
-  operations: ["create", "edit", "update", "toggle", "delete"]
+  // Operations follow the chota-react-saga template:
+  //   - create / read / update / toggle / delete are async (3 phases each)
+  //   - edit is synchronous (just sets currentTodoItem; no SUCCESS/ERROR)
+  operations: ["create", "read", "edit", "update", "toggle", "delete"],
+  syncOps: ["edit"]
 };
 
 const WEATHER_ENTITY = {

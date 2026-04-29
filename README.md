@@ -2,7 +2,26 @@
 
 An [opencode](https://opencode.ai) plugin that turns the [Universal Frontend Architecture](https://elegantfrontend.training/blog/universal-frontend-architecture) into a microtask harness for **small local models**. The goal: run on **Qwen3 32B** or **Gemma3 27B** via Ollama and produce code with the same quality as a frontier model, by reducing every coding decision to a tightly-scoped microtask the model cannot get wrong.
 
-This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth. A vendored copy of the 14 skills referenced by the pipeline lives in this repo at `skills/` so you can iterate on them locally; override with `ELEGANT_SKILLS_ROOT` to point elsewhere.
+This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth. A vendored copy of the 16 skills referenced by the pipelines lives in this repo at `skills/` so you can iterate on them locally; override with `ELEGANT_SKILLS_ROOT` to point elsewhere.
+
+## Archetypes
+
+The harness produces apps in well-defined **archetypes**. Each archetype is a
+named pipeline + manifest + emitter set. The seed `entity-schema` microtask
+declares the archetype `kind`; the orchestrator picks the matching pipeline.
+
+| Archetype     | Example spec            | Key skills                                                  |
+|---------------|-------------------------|-------------------------------------------------------------|
+| `crud-list`   | "build a todo app"      | state-crud, state-actions(CRUD verbs), filters-slice        |
+| `fetch-card`  | "build a weather app"   | state-ajax, state-actions(REQUEST/RECEIVE/FAIL), state-middleware (ajax) |
+
+Both archetypes share the same `app-shell`, `ui-theme`, `ui-base-atoms`,
+`ui-context-atoms`, `ui-skeleton`, `ui-layout`, `atomic-provider`, and
+`config-slice` emitters — only the entity-shaped state and the entity-shaped
+UI molecules / organism / container differ. Adding a new archetype = adding
+one entry to `ARCHETYPES` in `src/terminology.js`, one builder map in
+`src/file-manifest.js`, and one set of emitters under
+`src/emitters/<archetype>/`.
 
 ---
 
@@ -20,9 +39,11 @@ The pipeline IS the architecture. The chota-react-redux template happens to be o
 
 ---
 
-## The pipeline
+## The crud-list pipeline
 
-21 microtasks bound to skills. 15 fixed (zero LLM tokens), 6 variable (small LLM, schema- and manifest-locked).
+21 microtasks bound to skills. 15 fixed (zero LLM tokens), 6 variable (small LLM, schema- and manifest-locked). The fetch-card pipeline shares the
+same shape; it swaps `filters-slice` for `ajax-middleware` and the entity-
+shaped state + UI emitters for ajax-flavoured ones.
 
 | Microtask | Skill | Mode | Files emitted |
 |---|---|---|---|
@@ -125,13 +146,17 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 
 ## Live demo
 
-Every push to `main` regenerates `build a todo app` through the harness and
-publishes the result to GitHub Pages — landing page, live React + Redux app,
-and the pipeline trace JSON — via `.github/workflows/deploy.yml`. The workflow
-runs `npm run demo:todo` (the deterministic same-orchestrator path: same
+Every push regenerates BOTH demos through the harness and publishes them
+side-by-side to GitHub Pages — a landing page that links to:
+
+  • `/todo/`     — `build a todo app`     (crud-list archetype, 128 files)
+  • `/weather/`  — `build a weather app`  (fetch-card archetype, 107 files)
+
+`.github/workflows/deploy.yml` runs `npm run demo:todo` and
+`npm run demo:weather` (the deterministic same-orchestrator path: same
 emitters, same skills, same manifest validation, driven by a sim-LLM stub
-so CI builds are reproducible and free), then `vite build`s the 128 emitted
-files, and assembles a wrapper page with `scripts/build-pages.js`.
+so CI builds are reproducible and free), `vite build`s each emitted app,
+and assembles the wrapper site with `scripts/build-pages.js`.
 
 To enable Pages on a fresh clone: repo *Settings → Pages → Source = GitHub
 Actions* (one-time setup), then push to `main` or trigger the workflow
@@ -141,6 +166,8 @@ manually. Locally:
 npm install
 npm run demo:todo
 (cd demo-output && npm install && npm run build)
+npm run demo:weather
+(cd weather-output && npm install && npm run build)
 npm run pages:build
 # serve gh-pages/ with any static server
 ```

@@ -1,4 +1,4 @@
-// Per-microtask file manifest.
+// Per-microtask file manifest, archetype-keyed.
 //
 // For every microtask that emits files, we know — from the bound SKILL.md —
 // which relPaths MUST be present, which symbols MUST appear in their content,
@@ -16,10 +16,10 @@
 //   paths      — exact relPath set the microtask must produce.
 //   invariants — list of { path, mustContain: string[], mustNotContain?: string[] }.
 //
-// If you change a SKILL.md, update the manifest here. The agents/*.md prompts
-// pull from this file at build time so they stay in sync.
+// Manifests differ by archetype where the file set differs. crud-list is the
+// default; fetch-card overrides only the entries that change.
 
-import { TERMINOLOGY } from "./terminology.js";
+import { archetypeOf, getTerminology } from "./terminology.js";
 
 // Helpers --------------------------------------------------------------------
 
@@ -39,9 +39,19 @@ function names(entity) {
   };
 }
 
-// Manifest builders ----------------------------------------------------------
+function fetchNames(entity) {
+  const Slice = entity.name;                      // "Weather"
+  const slice = entity.slice;                     // "weather"
+  const Card = `${Slice}Card`;                    // "WeatherCard"
+  const QueryForm = `${Slice}QueryForm`;          // "WeatherQueryForm"
+  const View = `${Slice}View`;                    // "WeatherView"
+  const ViewContainer = `${View}Container`;       // "WeatherViewContainer"
+  return { Slice, slice, Card, QueryForm, View, ViewContainer };
+}
 
-const BUILDERS = {
+// Archetype-shared manifest builders (always identical across archetypes) ----
+
+const SHARED_BUILDERS = {
   "entity-schema": () => ({ paths: [], invariants: [] }),
 
   "ui-theme": () => ({
@@ -73,52 +83,12 @@ const BUILDERS = {
     ]
   }),
 
-  "state-types": (entity) => {
-    const { slice } = names(entity);
-    return {
-      paths: [`src/state/${slice}/${slice}.type.js`],
-      invariants: entity.operations.map((op) => ({
-        path: `src/state/${slice}/${slice}.type.js`,
-        mustContain: [`${op.toUpperCase()}_${slice.toUpperCase()}`]
-      }))
-    };
-  },
-
   "state-initial": (entity) => {
     const { slice } = names(entity);
     return {
       paths: [`src/state/${slice}/${slice}.initial.js`],
       invariants: [
         { path: `src/state/${slice}/${slice}.initial.js`, mustContain: ["export const"] }
-      ]
-    };
-  },
-
-  "state-actions": (entity) => {
-    const { slice } = names(entity);
-    return {
-      paths: [
-        `src/state/${slice}/${slice}.actions.js`,
-        `src/state/${slice}/${slice}.actions.test.js`
-      ],
-      invariants: [
-        {
-          path: `src/state/${slice}/${slice}.actions.js`,
-          mustContain: entity.operations.map((op) => `${op}${entity.name}`)
-        }
-      ]
-    };
-  },
-
-  "state-reducer": (entity) => {
-    const { slice } = names(entity);
-    return {
-      paths: [
-        `src/state/${slice}/${slice}.reducer.js`,
-        `src/state/${slice}/${slice}.reducer.test.js`
-      ],
-      invariants: [
-        { path: `src/state/${slice}/${slice}.reducer.js`, mustContain: ["switch", "default"] }
       ]
     };
   },
@@ -136,20 +106,6 @@ const BUILDERS = {
     };
   },
 
-  "filters-slice": () => ({
-    paths: [
-      "src/state/filters/filters.type.js",
-      "src/state/filters/filters.initial.js",
-      "src/state/filters/filters.actions.js",
-      "src/state/filters/filters.actions.test.js",
-      "src/state/filters/filters.reducer.js",
-      "src/state/filters/filters.reducer.test.js",
-      "src/state/filters/filters.selectors.js",
-      "src/state/filters/filters.selectors.test.js"
-    ],
-    invariants: []
-  }),
-
   "config-slice": () => ({
     paths: [
       "src/state/config/config.type.js",
@@ -162,13 +118,6 @@ const BUILDERS = {
       "src/state/config/config.selectors.test.js"
     ],
     invariants: []
-  }),
-
-  "state-store": () => ({
-    paths: ["src/state/store.js"],
-    invariants: [
-      { path: "src/state/store.js", mustContain: ["createStore", "combineReducers"] }
-    ]
   }),
 
   "atomic-provider": () => ({
@@ -233,24 +182,6 @@ const BUILDERS = {
     invariants: []
   }),
 
-  "ui-domain-atom": (entity) => {
-    const { Item } = names(entity);
-    const base = `src/ui/atoms/${Item}/${Item}`;
-    return {
-      paths: [
-        `${base}.component.jsx`,
-        `${base}.stories.js`,
-        `${base}.style.css`,
-        `${base}.test.jsx`,
-        `${base}.type.js`,
-        `${base}.type.test.js`
-      ],
-      invariants: [
-        { path: `${base}.component.jsx`, mustContain: ["export default"] }
-      ]
-    };
-  },
-
   "ui-skeleton": () => ({
     paths: [
       "src/ui/skeletons/SiteHeaderSkeleton/SiteHeaderSkeleton.component.jsx",
@@ -277,6 +208,102 @@ const BUILDERS = {
       { path: "src/ui/templates/Layout/Layout.component.jsx", mustContain: ["export default", "children"] }
     ]
   }),
+
+  "state-store": () => ({
+    paths: ["src/state/store.js"],
+    invariants: [
+      { path: "src/state/store.js", mustContain: ["createStore", "combineReducers"] }
+    ]
+  }),
+
+  "page": () => ({
+    paths: [
+      "src/pages/HomePage/HomePage.component.jsx",
+      "src/pages/HomePage/HomePage.style.css",
+      "src/pages/HomePage/HomePage.test.jsx"
+    ],
+    invariants: [
+      { path: "src/pages/HomePage/HomePage.component.jsx", mustContain: ["export default", "Layout"] }
+    ]
+  })
+};
+
+// crud-list-specific manifests ----------------------------------------------
+
+const CRUD_LIST_BUILDERS = {
+  ...SHARED_BUILDERS,
+
+  "state-types": (entity) => {
+    const { slice } = names(entity);
+    return {
+      paths: [`src/state/${slice}/${slice}.type.js`],
+      invariants: entity.operations.map((op) => ({
+        path: `src/state/${slice}/${slice}.type.js`,
+        mustContain: [`${op.toUpperCase()}_${slice.toUpperCase()}`]
+      }))
+    };
+  },
+
+  "state-actions": (entity) => {
+    const { slice } = names(entity);
+    return {
+      paths: [
+        `src/state/${slice}/${slice}.actions.js`,
+        `src/state/${slice}/${slice}.actions.test.js`
+      ],
+      invariants: [
+        {
+          path: `src/state/${slice}/${slice}.actions.js`,
+          mustContain: entity.operations.map((op) => `${op}${entity.name}`)
+        }
+      ]
+    };
+  },
+
+  "state-reducer": (entity) => {
+    const { slice } = names(entity);
+    return {
+      paths: [
+        `src/state/${slice}/${slice}.reducer.js`,
+        `src/state/${slice}/${slice}.reducer.test.js`
+      ],
+      invariants: [
+        { path: `src/state/${slice}/${slice}.reducer.js`, mustContain: ["switch", "default"] }
+      ]
+    };
+  },
+
+  "filters-slice": () => ({
+    paths: [
+      "src/state/filters/filters.type.js",
+      "src/state/filters/filters.initial.js",
+      "src/state/filters/filters.actions.js",
+      "src/state/filters/filters.actions.test.js",
+      "src/state/filters/filters.reducer.js",
+      "src/state/filters/filters.reducer.test.js",
+      "src/state/filters/filters.selectors.js",
+      "src/state/filters/filters.selectors.test.js"
+    ],
+    invariants: []
+  }),
+
+  "ui-domain-atom": (entity) => {
+    const { Item } = names(entity);
+    const base = `src/ui/atoms/${Item}/${Item}`;
+    return {
+      paths: [
+        `${base}.component.jsx`,
+        `${base}.stories.js`,
+        `${base}.style.css`,
+        `${base}.test.jsx`,
+        `${base}.type.js`,
+        `${base}.type.test.js`
+      ],
+      invariants: [
+        { path: `${base}.component.jsx`, mustContain: ["export default"] }
+      ]
+    };
+  },
 
   "ui-molecule": (entity) => {
     const { FormName, ItemsName } = names(entity);
@@ -349,25 +376,148 @@ const BUILDERS = {
         { path: `src/containers/${ContainerList}.jsx`, mustContain: ["useSelector", "useDispatch"] }
       ]
     };
+  }
+};
+
+// fetch-card-specific manifests ---------------------------------------------
+// state-actions encode REQUEST / RECEIVE / FAIL; state-store deps include
+// ajax-middleware instead of filters-slice; UI is a single QueryForm + Card
+// composition (no filter group, no list).
+
+const FETCH_CARD_BUILDERS = {
+  ...SHARED_BUILDERS,
+
+  "state-types": (entity) => {
+    const { slice } = fetchNames(entity);
+    return {
+      paths: [`src/state/${slice}/${slice}.type.js`],
+      invariants: [
+        { path: `src/state/${slice}/${slice}.type.js`, mustContain: [`REQUEST_${slice.toUpperCase()}`, `RECEIVE_${slice.toUpperCase()}`, `FAIL_${slice.toUpperCase()}`] }
+      ]
+    };
   },
 
-  page: () => ({
+  "state-actions": (entity) => {
+    const { slice, Slice } = fetchNames(entity);
+    return {
+      paths: [
+        `src/state/${slice}/${slice}.actions.js`,
+        `src/state/${slice}/${slice}.actions.test.js`
+      ],
+      invariants: [
+        { path: `src/state/${slice}/${slice}.actions.js`, mustContain: [`request${Slice}`, `receive${Slice}`, `fail${Slice}`] }
+      ]
+    };
+  },
+
+  "state-reducer": (entity) => {
+    const { slice } = fetchNames(entity);
+    return {
+      paths: [
+        `src/state/${slice}/${slice}.reducer.js`,
+        `src/state/${slice}/${slice}.reducer.test.js`
+      ],
+      invariants: [
+        { path: `src/state/${slice}/${slice}.reducer.js`, mustContain: ["switch", "default"] }
+      ]
+    };
+  },
+
+  "ajax-middleware": () => ({
     paths: [
-      "src/pages/HomePage/HomePage.component.jsx",
-      "src/pages/HomePage/HomePage.style.css",
-      "src/pages/HomePage/HomePage.test.jsx"
+      "src/state/middleware/ajax.middleware.js",
+      "src/state/middleware/ajax.middleware.test.js"
     ],
     invariants: [
-      { path: "src/pages/HomePage/HomePage.component.jsx", mustContain: ["export default", "Layout"] }
+      { path: "src/state/middleware/ajax.middleware.js", mustContain: ["export default"] }
     ]
-  })
+  }),
+
+  "ui-domain-atom": (entity) => {
+    const { Card } = fetchNames(entity);
+    const base = `src/ui/atoms/${Card}/${Card}`;
+    return {
+      paths: [
+        `${base}.component.jsx`,
+        `${base}.stories.js`,
+        `${base}.style.css`,
+        `${base}.test.jsx`,
+        `${base}.type.js`
+      ],
+      invariants: [
+        { path: `${base}.component.jsx`, mustContain: ["export default"] }
+      ]
+    };
+  },
+
+  "ui-molecule": (entity) => {
+    const { QueryForm } = fetchNames(entity);
+    const qb = `src/ui/molecules/${QueryForm}/${QueryForm}`;
+    return {
+      paths: [
+        `${qb}.component.jsx`,
+        `${qb}.stories.js`,
+        `${qb}.test.jsx`,
+        `${qb}.style.css`
+      ],
+      invariants: [
+        { path: `${qb}.component.jsx`, mustContain: ["export default", "onSubmit"] }
+      ]
+    };
+  },
+
+  "ui-organism": (entity) => {
+    const { View } = fetchNames(entity);
+    const sh = "src/ui/organisms/SiteHeader/SiteHeader";
+    const vb = `src/ui/organisms/${View}/${View}`;
+    return {
+      paths: [
+        `${sh}.component.jsx`,
+        `${sh}.stories.js`,
+        `${sh}.style.css`,
+        `${sh}.test.jsx`,
+        `${vb}.component.jsx`,
+        `${vb}.stories.js`,
+        `${vb}.test.jsx`
+      ],
+      invariants: [
+        { path: `${sh}.component.jsx`, mustContain: ["export default"] },
+        { path: `${vb}.component.jsx`, mustContain: ["export default"] }
+      ]
+    };
+  },
+
+  container: (entity) => {
+    const { ViewContainer } = fetchNames(entity);
+    return {
+      paths: [
+        "src/containers/ConfigContainer.js",
+        "src/containers/ConfigContainer.test.jsx",
+        "src/containers/SiteHeaderContainer.jsx",
+        "src/containers/SiteHeaderContainer.test.jsx",
+        `src/containers/${ViewContainer}.jsx`,
+        `src/containers/${ViewContainer}.test.jsx`
+      ],
+      invariants: [
+        { path: "src/containers/SiteHeaderContainer.jsx", mustContain: ["useSelector", "useDispatch"] },
+        { path: `src/containers/${ViewContainer}.jsx`, mustContain: ["useSelector", "useDispatch"] }
+      ]
+    };
+  }
+};
+
+const ARCHETYPE_BUILDERS = {
+  "crud-list": CRUD_LIST_BUILDERS,
+  "fetch-card": FETCH_CARD_BUILDERS
 };
 
 export function manifestFor(microtask, entity) {
-  const builder = BUILDERS[microtask];
+  const kind = archetypeOf(entity);
+  const builders = ARCHETYPE_BUILDERS[kind] || CRUD_LIST_BUILDERS;
+  const builder = builders[microtask] || CRUD_LIST_BUILDERS[microtask];
   if (!builder) {
-    if (TERMINOLOGY[microtask]) return { paths: [], invariants: [] };
-    throw new Error(`No file manifest for microtask "${microtask}"`);
+    if (getTerminology(kind, microtask)) return { paths: [], invariants: [] };
+    throw new Error(`No file manifest for microtask "${microtask}" in archetype "${kind}"`);
   }
   return builder(entity || {});
 }

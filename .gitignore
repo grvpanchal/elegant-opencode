@@ -1,5 +1,6 @@
 node_modules/
 demo-output/
+weather-output/
 gh-pages/
 test/stab/
 test/out/

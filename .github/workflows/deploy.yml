@@ -30,16 +30,27 @@ jobs:
       - name: Install plugin deps
         run: npm ci
 
-      - name: Run elegant harness (sim-LLM, deterministic)
+      - name: Run elegant harness — todo (crud-list)
         run: npm run demo:todo
 
-      - name: Install generated app deps
+      - name: Run elegant harness — weather (fetch-card)
+        run: npm run demo:weather
+
+      - name: Install todo app deps
         run: npm install --no-audit --no-fund
         working-directory: demo-output
 
-      - name: Build generated app
+      - name: Build todo app
         run: npm run build
         working-directory: demo-output
+
+      - name: Install weather app deps
+        run: npm install --no-audit --no-fund
+        working-directory: weather-output
+
+      - name: Build weather app
+        run: npm run build
+        working-directory: weather-output
 
       - name: Assemble Pages site
         run: npm run pages:build

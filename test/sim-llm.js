@@ -12,29 +12,65 @@
 // The orchestrator's repair loop must reach manifest-valid output in ≤3
 // attempts every time. Attempt 3 always returns clean output so the harness
 // can measure recovery rate, not a hard-fail rate.
+//
+// ARCHETYPE DISPATCH
+// ──────────────────
+// The seed entity-schema microtask receives the user's spec ("build a todo
+// app", "build a weather app", …). We classify the spec to one of the known
+// canonical entities and return its full record — including `kind` — so the
+// orchestrator can pick the right pipeline. The schema-agent prompt in
+// production performs the same classification.
 
-import { TERMINOLOGY } from "../src/terminology.js";
+import { getTerminology, archetypeOf } from "../src/terminology.js";
 import { emitFixed } from "../src/deterministic-emitters.js";
 
-// The canonical entity for the "build a todo app" spec. Mirrors what the
-// schema-agent would derive from the user's plain-English prompt.
+// Canonical entities ---------------------------------------------------------
+// One per archetype. The schema-agent in production extracts these same
+// fields from a free-text spec; the deterministic stand-in matches by
+// keyword.
+
 const TODO_ENTITY = {
   name: "Todo",
   slice: "todo",
   appName: "Todo App",
   projectName: "todo-app",
+  kind: "crud-list",
   itemsField: "todoItems",
   currentField: "currentTodoItem",
   operations: ["create", "edit", "update", "toggle", "delete"]
 };
 
+const WEATHER_ENTITY = {
+  name: "Weather",
+  slice: "weather",
+  appName: "Weather App",
+  projectName: "weather-app",
+  kind: "fetch-card",
+  queryField: "city",
+  queryPlaceholder: "Enter a city…",
+  responseFields: ["temperature", "condition", "humidity"]
+};
+
+const ENTITY_BY_KEYWORD = [
+  { match: /\bweather\b|\bforecast\b|\bclimate\b/i, entity: WEATHER_ENTITY },
+  { match: /\btodo\b|\btask\b|\bcomment\b|\bproduct\b|\blist\b/i, entity: TODO_ENTITY }
+];
+
+function classifySpec(spec) {
+  const text = typeof spec === "string" ? spec : (spec?.spec || "");
+  for (const { match, entity } of ENTITY_BY_KEYWORD) {
+    if (match.test(text)) return entity;
+  }
+  return TODO_ENTITY; // back-compat default
+}
+
 // Ideal answer for a microtask. For "entity-schema" we return the entity
 // itself; for every other variable task we run the per-skill emitter (which
 // returns `{ files: {...} }`) — the LLM in production is asked for the
 // SAME shape, so this is the canonical reference output.
-function ideal(task) {
-  if (task === "entity-schema") return TODO_ENTITY;
-  return emitFixed(task, TODO_ENTITY, {});
+function ideal(task, entity) {
+  if (task === "entity-schema") return entity;
+  return emitFixed(task, entity, {});
 }
 
 // Inject failure-modes by attempt index.
@@ -50,10 +86,13 @@ function distort(attempt, value, task, seed) {
   let out = JSON.parse(JSON.stringify(value));
 
   if (task === "entity-schema") {
-    // 25%: drop a required field
-    if (r < 0.25) delete out.operations;
+    // 25%: drop a required field (operations or kind, depending on archetype)
+    if (r < 0.25) {
+      if (out.operations) delete out.operations;
+      else if (out.queryField) delete out.queryField;
+    }
     // 25%: wrong slice case
-    else if (r < 0.5) out.slice = "Todo";
+    else if (r < 0.5) out.slice = (out.slice || "x")[0].toUpperCase() + (out.slice || "x").slice(1);
   } else {
     const fileKeys = Object.keys(out.files || {});
     // 20%: drop a required file
@@ -91,17 +130,37 @@ function mulberry32(a) {
   };
 }
 
-export function makeSimLLM(seed = 1) {
+// Build a sim-LLM keyed to a particular spec / entity so a single makeSimLLM
+// call can drive an entire pipeline run. Pass a `kind` or `spec` in opts to
+// pin the archetype.
+export function makeSimLLM(seed = 1, opts = {}) {
   let counter = 0;
   const calls = new Map();
+  // Cache the entity classification on the first entity-schema call so the
+  // remainder of the pipeline uses the same kind.
+  let pinnedEntity = opts.entity || null;
+  if (opts.kind === "fetch-card") pinnedEntity = WEATHER_ENTITY;
+  else if (opts.kind === "crud-list") pinnedEntity = TODO_ENTITY;
+
   return async function simLLM({ agent, system, user, task }) {
     const attempts = (calls.get(task) || 0) + 1;
     calls.set(task, attempts);
     counter++;
-    if (!TERMINOLOGY[task]) {
-      throw new Error(`sim-llm: no terminology entry for task "${task}"`);
+    const kind = archetypeOf(pinnedEntity || {});
+    if (!getTerminology(kind, task)) {
+      throw new Error(`sim-llm: no terminology entry for task "${task}" in archetype "${kind}"`);
     }
-    const value = ideal(task);
-    return distort(attempts, value, task, seed + counter);
+    if (task === "entity-schema") {
+      pinnedEntity = pinnedEntity || classifySpec(opts.spec || user || system || "");
+      return distort(attempts, ideal(task, pinnedEntity), task, seed + counter);
+    }
+    if (!pinnedEntity) {
+      // Defensive: someone called sim-llm for a non-seed task without the
+      // seed running first. Fall back to the todo entity.
+      pinnedEntity = TODO_ENTITY;
+    }
+    return distort(attempts, ideal(task, pinnedEntity), task, seed + counter);
   };
 }
+
+export const ENTITIES = { todo: TODO_ENTITY, weather: WEATHER_ENTITY };

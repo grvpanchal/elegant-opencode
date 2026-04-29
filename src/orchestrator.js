@@ -7,13 +7,15 @@
 //   • `{ files: { relPath: <string source> } }` for every other task.
 // Two-layer validation (Ajv + per-microtask file manifest) gates every step.
 
-import { PIPELINE, TERMINOLOGY, isVariable } from "./terminology.js";
+import { archetypeOf, getPipeline, getTerminology, isVariable } from "./terminology.js";
 import { buildContext } from "./context-builder.js";
 import { emitFixed } from "./deterministic-emitters.js";
 import { validate, repairPrompt } from "./validator.js";
 
 export async function runPipeline({ entitySpec, llm, onTrace = () => {} }) {
-  // 1. seed entity schema (variable, but cheap)
+  // 1. seed entity schema (variable, but cheap). The seed declares the
+  //    archetype kind ("crud-list" / "fetch-card" / …); the pipeline is
+  //    selected from that.
   const entityCtx = buildContext({
     task: "entity-schema",
     entitySchema: entitySpec,
@@ -26,14 +28,17 @@ export async function runPipeline({ entitySpec, llm, onTrace = () => {} }) {
     task: "entity-schema",
     entity: null
   });
+  const kind = archetypeOf(entitySchema);
+  const pipeline = getPipeline(kind);
+
   const upstream = { "entity-schema": entitySchema };
 
-  // 2. iterate the pipeline in topological order
-  for (const task of PIPELINE) {
+  // 2. iterate the archetype-specific pipeline in topological order
+  for (const task of pipeline) {
     if (task === "entity-schema") continue;
     const t0 = Date.now();
     let result;
-    if (isVariable(task)) {
+    if (isVariable(task, kind)) {
       const ctx = buildContext({ task, entitySchema, upstream });
       result = await callLLMWithRepair({
         ctx,
@@ -49,7 +54,7 @@ export async function runPipeline({ entitySpec, llm, onTrace = () => {} }) {
     onTrace({
       task,
       ms: Date.now() - t0,
-      via: isVariable(task) ? `llm:${TERMINOLOGY[task].agent}` : "deterministic",
+      via: isVariable(task, kind) ? `llm:${getTerminology(kind, task).agent}` : "deterministic",
       ok: true
     });
   }

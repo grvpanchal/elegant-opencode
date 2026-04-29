@@ -1,9 +1,9 @@
 // Deterministic emitter dispatcher.
 //
 // Each microtask in the pipeline maps to exactly one per-skill emitter
-// module under `src/emitters/`. The emitter functions encode the SKILL.md
-// "Code Patterns" + "Key Principles" as JS code generators that take the
-// entity schema and return a `{ files: { relPath: content } }` map.
+// module. The emitter functions encode the SKILL.md "Code Patterns" + "Key
+// Principles" as JS code generators that take the entity schema and return
+// a `{ files: { relPath: content } }` map.
 //
 // "fixed" microtasks: production runs the emitter directly. Zero LLM tokens,
 // zero variability — the skill IS the source of truth for the structure.
@@ -12,8 +12,16 @@
 // In sim-llm we use the same emitter as a deterministic stand-in — the LLM
 // is asked to produce skill-conforming output, so the emitter's output is
 // the canonical reference of what valid output looks like.
+//
+// ARCHETYPE DISPATCH
+// ──────────────────
+// Each archetype maps a microtask name to its emitter module. crud-list is
+// the default registry; fetch-card overrides the entries that differ
+// (state-types/actions/reducer/store, ajax-middleware, ui-domain-atom,
+// ui-molecule, ui-organism, container, page) and falls back to crud-list
+// for archetype-agnostic ones (app-shell, ui-theme, ui-base-atoms, etc.).
 
-import { TERMINOLOGY, isVariable } from "./terminology.js";
+import { archetypeOf, isVariable } from "./terminology.js";
 
 import * as appShell        from "./emitters/app-shell.js";
 import * as uiTheme         from "./emitters/ui-theme.js";
@@ -36,9 +44,22 @@ import * as uiOrganism      from "./emitters/ui-organism.js";
 import * as container       from "./emitters/container.js";
 import * as page            from "./emitters/page.js";
 
-// Map microtask name → emitter module.
-// `entity-schema` produces no files (it's the seed input).
-const EMITTERS = {
+// fetch-card overrides
+import * as fcStateTypes    from "./emitters/fetch-card/state-types.js";
+import * as fcStateInitial  from "./emitters/fetch-card/state-initial.js";
+import * as fcStateActions  from "./emitters/fetch-card/state-actions.js";
+import * as fcStateReducer  from "./emitters/fetch-card/state-reducer.js";
+import * as fcStateStore    from "./emitters/fetch-card/state-store.js";
+import * as fcStateSelectors from "./emitters/fetch-card/state-selectors.js";
+import * as fcAjaxMiddleware from "./emitters/fetch-card/ajax-middleware.js";
+import * as fcUiDomainAtom  from "./emitters/fetch-card/ui-domain-atom.js";
+import * as fcUiMolecule    from "./emitters/fetch-card/ui-molecule.js";
+import * as fcUiOrganism    from "./emitters/fetch-card/ui-organism.js";
+import * as fcContainer     from "./emitters/fetch-card/container.js";
+import * as fcPage          from "./emitters/fetch-card/page.js";
+
+// Default crud-list registry.
+const CRUD_LIST_EMITTERS = {
   "app-shell":        appShell,
   "ui-theme":         uiTheme,
   "state-types":      stateTypes,
@@ -58,14 +79,41 @@ const EMITTERS = {
   "ui-molecule":      uiMolecule,
   "ui-organism":      uiOrganism,
   "container":        container,
-  "page":             page,
+  "page":             page
 };
+
+// fetch-card overrides; missing keys fall back to crud-list.
+const FETCH_CARD_OVERRIDES = {
+  "state-types":      fcStateTypes,
+  "state-initial":    fcStateInitial,
+  "state-actions":    fcStateActions,
+  "state-reducer":    fcStateReducer,
+  "state-store":      fcStateStore,
+  "state-selectors":  fcStateSelectors,
+  "ajax-middleware":  fcAjaxMiddleware,
+  "ui-domain-atom":   fcUiDomainAtom,
+  "ui-molecule":      fcUiMolecule,
+  "ui-organism":      fcUiOrganism,
+  "container":        fcContainer,
+  "page":             fcPage
+};
+
+const ARCHETYPE_EMITTERS = {
+  "crud-list":  CRUD_LIST_EMITTERS,
+  "fetch-card": { ...CRUD_LIST_EMITTERS, ...FETCH_CARD_OVERRIDES }
+};
+
+function emitterFor(microtask, entity) {
+  const kind = archetypeOf(entity);
+  const reg = ARCHETYPE_EMITTERS[kind] || CRUD_LIST_EMITTERS;
+  return reg[microtask] || CRUD_LIST_EMITTERS[microtask];
+}
 
 // Run a fixed microtask. Returns `{ files: {...} }`.
 export function emitFixed(microtask, entity, _upstream) {
   if (microtask === "entity-schema") return { files: {} };
-  const mod = EMITTERS[microtask];
-  if (!mod) throw new Error(`No emitter registered for microtask "${microtask}"`);
+  const mod = emitterFor(microtask, entity);
+  if (!mod) throw new Error(`No emitter registered for microtask "${microtask}" in archetype "${archetypeOf(entity)}"`);
   return { files: mod.emit(entity) };
 }
 
@@ -79,11 +127,10 @@ export function emitVariableSimulated(microtask, entity, upstream) {
 }
 
 // Universal entry point used by the orchestrator. Picks fixed vs variable
-// based on the terminology.
+// based on the terminology and the entity's archetype kind.
 export function emit(microtask, entity, upstream) {
-  return isVariable(microtask)
+  const kind = archetypeOf(entity);
+  return isVariable(microtask, kind)
     ? emitVariableSimulated(microtask, entity, upstream)
     : emitFixed(microtask, entity, upstream);
 }
-
-export { TERMINOLOGY };

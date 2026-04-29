@@ -1,7 +1,7 @@
 ---
 description: Emits the molecules that compose atoms into form/list/filter widgets. Encodes the ui-molecule skill (composition over creation, single cohesive purpose, props passthrough).
 mode: subagent
-model: opencode/minimax-m2.5-free
+model: opencode/big-pickle
 hidden: true
 tools: { read: false, write: false, bash: false, task: false }
 ---

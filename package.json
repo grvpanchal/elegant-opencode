@@ -29,6 +29,7 @@
     "test": "node test/harness.test.js",
     "stability": "node test/stability.test.js",
     "demo:todo": "node scripts/run-todo-demo.js",
+    "demo:weather": "node scripts/run-weather-demo.js",
     "pages:build": "node scripts/build-pages.js"
   }
 }

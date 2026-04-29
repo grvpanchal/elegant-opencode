@@ -1,67 +1,102 @@
-// Assemble the GitHub Pages site:
-//   gh-pages/
-//   ├── index.html   — landing wrapper (banner + iframe of /app/)
-//   ├── trace.json   — pipeline trace from examples/todo-trace.json
-//   └── app/         — vite build of the harness-generated todo app
+// Assemble the GitHub Pages site from BOTH demos:
 //
-// Run after `npm run demo:todo` and `cd demo-output && npm install && npm run build`.
+//   gh-pages/
+//   ├── index.html      — landing wrapper (links to both demos)
+//   ├── todo/
+//   │   ├── index.html  — todo demo wrapper (banner + iframe of /todo/app/)
+//   │   ├── trace.json  — pipeline trace
+//   │   └── app/        — vite-built todo app
+//   └── weather/
+//       ├── index.html  — weather demo wrapper
+//       ├── trace.json  — pipeline trace
+//       └── app/        — vite-built weather app
+//
+// Each demo wrapper exposes the entity name + microtask stats for the run,
+// so visitors can compare archetypes side-by-side. Run after the matching
+// `npm run demo:<name>` and `(cd <name>-output && npm install && npm run build)`.
+
 import { existsSync, mkdirSync, cpSync, copyFileSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const out = join(root, "gh-pages");
-const appBuild = join(root, "demo-output", "build");
-const trace = join(root, "examples", "todo-trace.json");
 
-if (!existsSync(appBuild)) {
-  console.error(`Missing ${appBuild}. Run \`npm run demo:todo\` then \`(cd demo-output && npm install && npm run build)\` first.`);
-  process.exit(1);
-}
-if (!existsSync(trace)) {
-  console.error(`Missing ${trace}. Run \`npm run demo:todo\` first.`);
-  process.exit(1);
-}
+const DEMOS = [
+  {
+    slug: "todo",
+    title: "Todo (crud-list archetype)",
+    blurb:
+      "List-with-filters CRUD app. Pipeline includes filters-slice; state-actions emit create/edit/update/toggle/delete; ui-molecule emits AddForm + FilterGroup + Items.",
+    output: "demo-output",
+    trace: "examples/todo-trace.json"
+  },
+  {
+    slug: "weather",
+    title: "Weather (fetch-card archetype)",
+    blurb:
+      "Query-and-display ajax app. Pipeline replaces filters-slice with ajax-middleware; state-actions emit request/receive/fail; ui-molecule emits a single QueryForm.",
+    output: "weather-output",
+    trace: "examples/weather-trace.json"
+  }
+];
 
 if (existsSync(out)) rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-cpSync(appBuild, join(out, "app"), { recursive: true });
-copyFileSync(trace, join(out, "trace.json"));
 
-const traceData = JSON.parse(readFileSync(trace, "utf8"));
-const fixed = traceData.trace.filter((t) => t.via === "deterministic" && t.ok).length;
-// LLM-driven count = subagent-finalised tasks + entity-schema seed (which has no `via`).
-const llm =
-  traceData.trace.filter((t) => t.via && t.via.startsWith("llm:") && t.ok).length + 1;
-const totalTasks = fixed + llm;
-const repairs = traceData.trace.filter((t) => t.ok === false).length;
-const fileCount = (traceData.files || []).length;
-const entity = traceData.entity?.entity || traceData.entity?.name || "Todo";
+const cards = [];
 
-const html = `<!doctype html>
+for (const demo of DEMOS) {
+  const appBuild = join(root, demo.output, "build");
+  const tracePath = join(root, demo.trace);
+  if (!existsSync(appBuild)) {
+    console.error(
+      `[skip] ${demo.slug}: missing ${appBuild}. Run \`npm run demo:${demo.slug}\` then \`(cd ${demo.output} && npm install && npm run build)\`.`
+    );
+    continue;
+  }
+  if (!existsSync(tracePath)) {
+    console.error(`[skip] ${demo.slug}: missing ${tracePath}.`);
+    continue;
+  }
+
+  const dir = join(out, demo.slug);
+  mkdirSync(dir, { recursive: true });
+  cpSync(appBuild, join(dir, "app"), { recursive: true });
+  copyFileSync(tracePath, join(dir, "trace.json"));
+
+  const traceData = JSON.parse(readFileSync(tracePath, "utf8"));
+  const fixed = traceData.trace.filter((t) => t.via === "deterministic" && t.ok).length;
+  const llm =
+    traceData.trace.filter((t) => t.via && t.via.startsWith("llm:") && t.ok).length + 1;
+  const totalTasks = fixed + llm;
+  const repairs = traceData.trace.filter((t) => t.ok === false).length;
+  const fileCount = (traceData.files || []).length;
+  const entity = traceData.entity?.entity || traceData.entity?.name || demo.slug;
+  const kind = traceData.entity?.kind || "—";
+
+  writeFileSync(join(dir, "index.html"), demoPage({ demo, entity, kind, totalTasks, fixed, llm, repairs, fileCount }));
+  cards.push({ demo, entity, kind, totalTasks, fixed, llm, repairs, fileCount });
+}
+
+writeFileSync(join(out, "index.html"), landingPage(cards));
+console.log(`Wrote ${out}/ with ${cards.length} demo(s)`);
+
+// ---------------------------------------------------------------------------
+
+function demoPage({ demo, entity, kind, totalTasks, fixed, llm, repairs, fileCount }) {
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>elegant/opencode — todo app harness demo</title>
-<style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
-  header { padding: 20px 24px; border-bottom: 1px solid #8884; background: #f8f8fa; }
-  header.dark { background: #16181d; color: #eee; }
-  @media (prefers-color-scheme: dark) { header { background: #16181d; color: #eee; } }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  p { margin: 0 0 6px; opacity: .8; font-size: 13px; }
-  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; opacity: .85; margin-top: 8px; }
-  .stats span { padding: 2px 8px; border: 1px solid #8884; border-radius: 4px; }
-  .links a { color: inherit; text-decoration: underline; margin-right: 12px; font-size: 12px; }
-  iframe { width: 100%; height: calc(100vh - 130px); border: 0; display: block; }
-</style>
+<title>elegant/opencode — ${demo.title}</title>
+<style>${commonCss()}</style>
 </head>
 <body>
 <header>
-  <h1>elegant/opencode — harness output</h1>
-  <p>Live render of a ${fileCount}-file React + Redux <strong>${entity}</strong> app generated by the universal-architecture pipeline below.</p>
+  <h1>elegant/opencode — ${demo.title}</h1>
+  <p>${demo.blurb}</p>
+  <p>Live render of a ${fileCount}-file React + Redux <strong>${entity}</strong> app generated by the ${kind} pipeline.</p>
   <div class="stats">
     <span>${totalTasks} microtasks</span>
     <span>${fixed} deterministic</span>
@@ -69,16 +104,80 @@ const html = `<!doctype html>
     <span>${repairs} repair attempts</span>
     <span>${fileCount} files emitted</span>
   </div>
-  <div class="links" style="margin-top: 8px;">
-    <a href="https://github.com/grvpanchal/elegant-opencode">repo</a>
+  <div class="links">
+    <a href="../">← demos</a>
     <a href="trace.json">trace.json</a>
     <a href="app/">open app standalone</a>
+    <a href="https://github.com/grvpanchal/elegant-opencode">repo</a>
   </div>
 </header>
-<iframe src="app/" title="harness-generated todo app"></iframe>
+<iframe src="app/" title="harness-generated ${demo.slug} app"></iframe>
 </body>
 </html>
 `;
+}
 
-writeFileSync(join(out, "index.html"), html, "utf8");
-console.log(`Wrote ${out}/index.html, ${out}/trace.json, and ${out}/app/`);
+function landingPage(cards) {
+  if (cards.length === 0) {
+    return `<!doctype html><meta charset=utf-8><title>elegant/opencode</title>
+<p>No demo builds found. Run <code>npm run demo:todo</code> and <code>npm run demo:weather</code>, then their respective <code>npm install && npm run build</code> in each <code>*-output/</code> dir.</p>`;
+  }
+  const cardHtml = cards
+    .map(
+      (c) => `
+<a class="card" href="${c.demo.slug}/">
+  <h2>${c.demo.title}</h2>
+  <p>${c.demo.blurb}</p>
+  <div class="stats">
+    <span>${c.totalTasks} microtasks</span>
+    <span>${c.fixed} deterministic</span>
+    <span>${c.llm} LLM-driven</span>
+    <span>${c.repairs} repair attempts</span>
+    <span>${c.fileCount} files</span>
+  </div>
+</a>`
+    )
+    .join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>elegant/opencode — harness demos</title>
+<style>${commonCss()}
+.cards { display: grid; gap: 16px; padding: 16px 24px 32px; max-width: 960px; }
+@media (min-width: 720px) { .cards { grid-template-columns: 1fr 1fr; } }
+a.card { display: block; padding: 16px; border: 1px solid #8884; border-radius: 8px; text-decoration: none; color: inherit; }
+a.card:hover { border-color: #88a; }
+a.card h2 { margin: 0 0 8px; font-size: 16px; }
+a.card p { margin: 0 0 12px; opacity: .8; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>elegant/opencode — harness demos</h1>
+  <p>Same harness, two archetypes. Each demo runs the same orchestrator + skills, with the seed entity-schema's <code>kind</code> selecting the per-archetype pipeline + emitter set.</p>
+  <div class="links">
+    <a href="https://github.com/grvpanchal/elegant-opencode">repo</a>
+  </div>
+</header>
+<main class="cards">${cardHtml}</main>
+</body>
+</html>
+`;
+}
+
+function commonCss() {
+  return `:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+header { padding: 20px 24px; border-bottom: 1px solid #8884; background: #f8f8fa; }
+@media (prefers-color-scheme: dark) { header { background: #16181d; color: #eee; } }
+h1 { font-size: 18px; margin: 0 0 4px; }
+p { margin: 0 0 6px; opacity: .8; font-size: 13px; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; opacity: .85; margin-top: 8px; }
+.stats span { padding: 2px 8px; border: 1px solid #8884; border-radius: 4px; }
+.links { margin-top: 8px; }
+.links a { color: inherit; text-decoration: underline; margin-right: 12px; font-size: 12px; }
+iframe { width: 100%; height: calc(100vh - 130px); border: 0; display: block; }`;
+}

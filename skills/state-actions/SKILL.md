@@ -1,186 +1,159 @@
 ---
 name: state-actions
-description: Redux/NgRx/RTK action design — plain-object events describing what happened, FSA-compliant structure, and request/success/failure patterns for async flows. Use when writing action creators, RTK slices, or reviewing action-type naming and payload shape.
-when_to_use: Authoring or reviewing action creators, type constants, or RTK slice reducers; designing async action triples (request/success/failure); enforcing FSA compliance and serialisable payloads.
+description: Plain-object Redux actions for the chota-react-saga template — three-phase async triples (REQUEST / SUCCESS / ERROR) per CRUD verb, single-phase actions for sync ops, UPPER_SNAKE type constants, and explicit hand-written action creators (no createAsyncThunk).
+when_to_use: Authoring or reviewing `<slice>.type.js` constants and `<slice>.actions.js` creators; designing new entity operations; verifying the REQUEST/SUCCESS/ERROR triple matches the reducer's three-phase switch and the saga worker's `put(...)` calls.
 paths:
-  - "**/store/**/*.{js,ts}"
-  - "**/actions/**/*.{js,ts}"
-  - "**/*Actions*.{js,ts}"
-  - "**/*slice*.{js,ts}"
+  - "**/state/**/*.type.{js,ts}"
+  - "**/state/**/*.actions.{js,ts}"
 ---
 
-# Actions
+# Actions (Saga template)
 
 ## What are Actions?
 
-Actions are plain JavaScript objects describing "what happened"—not how state should change, just that a user clicked login or an API returned data. They're the only source of information for the store, creating an audit trail of every event in your application.
+Actions are plain JavaScript objects describing "what happened"—not how state should change, just that a user clicked submit or an API resolved. They are the only source of information for the store; in the saga template they are also the **only** way the UI talks to the saga middleware (no thunks, no async functions inside `dispatch`).
 
 ## Key Principles
 
-1. **Descriptive, Not Imperative**: Actions say "user logged in" not "set user to X". They describe events, not commands.
+1. **Three phases per async op.** Every async CRUD verb gets exactly three constants and three creators: `<OP>_<ENTITY>` (REQUEST), `<OP>_<ENTITY>_SUCCESS`, `<OP>_<ENTITY>_ERROR`. The container dispatches the bare REQUEST; the saga `put`s the SUCCESS or ERROR.
 
-2. **Plain Serializable Objects**: Actions must be plain objects (no functions, Promises, classes). This enables logging, replay, and persistence.
+2. **One phase for sync ops.** Stage-style ops (e.g. `EDIT_TODO`, which only sets `currentTodoItem`) emit the bare REQUEST and nothing else. The reducer handles it directly.
 
-3. **Single Type Property**: Every action has a `type` string identifying it. Convention: `'domain/eventName'`.
+3. **UPPER_SNAKE_CASE type constants.** Every type is declared once in `<slice>.type.js` and imported by both the action creator and the reducer. Prevents typo-driven silent bugs.
+
+4. **Plain serializable objects.** Action payloads are POJOs only — no functions, Promises, classes, or Date instances. This is what makes redux-saga's effects testable: the saga compares dispatched actions by deep equality.
+
+5. **Hand-written creators, not RTK.** This template intentionally does NOT use `createSlice` / `createAsyncThunk`. The saga middleware listens for the REQUEST type directly, so abstracting creator boilerplate would only obscure the action surface.
+
+6. **Per-op signature.** `create<E>(text)` takes the new content and seeds `{text, completed:false, id:undefined}`. `delete<E>(id)` takes the id, packs `{id}`. `toggle<E>` and `update<E>` take the full payload. `read<E>()` takes nothing meaningful (often called from `useEffect` on mount). Success/error creators all take `payload` or `error`.
 
 ## Best Practices
 
 ✅ **DO**:
-- Use descriptive type names (`'todos/addTodo'`)
-- Follow FSA (Flux Standard Action) format
-- Use action creators to encapsulate creation
-- Define type constants to prevent typos
-- Use request/success/failure for async actions
+- Co-locate types and creators in the slice folder (`<slice>.type.js`, `<slice>.actions.js`).
+- Group creators in CRUD-canonical order: `create → read → edit → update → toggle → delete`.
+- Make `<op>Error(error)` accept any throwable; convert with `error.toString()` at the saga boundary.
+- For optimistic ops (toggle/delete), have `<op>Error(payload, error)` carry the rollback list as `payload`.
 
 ❌ **DON'T**:
-- Put non-serializable values in actions
-- Make action types too generic (`'UPDATE'`)
-- Dispatch from reducers (dispatch from components/middleware)
-- Mutate actions after creation
-- Skip action creators for complex payloads
+- Don't put `dispatch` calls inside action creators — creators return objects, full stop.
+- Don't add async behaviour to creators (no thunks). The saga middleware is the only async seam.
+- Don't reuse one action type for multiple ops (`UPDATE_TODO` should not also mean "create a new todo").
 
 ## Code Patterns
 
-### Action Types & Creators
+### Type constants (`<slice>.type.js`)
 
 ```javascript
-// Traditional pattern
-export const ADD_TODO = 'todos/add';
-export const TOGGLE_TODO = 'todos/toggle';
-export const DELETE_TODO = 'todos/delete';
-
-// Action creators
-let nextId = 0;
-
-export function addTodo(text) {
-  return {
-    type: ADD_TODO,
-    payload: {
-      id: nextId++,
-      text,
-      completed: false
-    }
-  };
-}
-
-export function toggleTodo(id) {
-  return { type: TOGGLE_TODO, payload: id };
-}
-
-export function deleteTodo(id) {
-  return { type: DELETE_TODO, payload: id };
-}
+// Three phases per async op…
+export const CREATE_TODO         = "CREATE_TODO"
+export const CREATE_TODO_SUCCESS = "CREATE_TODO_SUCCESS"
+export const CREATE_TODO_ERROR   = "CREATE_TODO_ERROR"
+export const READ_TODO           = "READ_TODO"
+export const READ_TODO_SUCCESS   = "READ_TODO_SUCCESS"
+export const READ_TODO_ERROR     = "READ_TODO_ERROR"
+export const UPDATE_TODO         = "UPDATE_TODO"
+export const UPDATE_TODO_SUCCESS = "UPDATE_TODO_SUCCESS"
+export const UPDATE_TODO_ERROR   = "UPDATE_TODO_ERROR"
+export const TOGGLE_TODO         = "TOGGLE_TODO"
+export const TOGGLE_TODO_SUCCESS = "TOGGLE_TODO_SUCCESS"
+export const TOGGLE_TODO_ERROR   = "TOGGLE_TODO_ERROR"
+export const DELETE_TODO         = "DELETE_TODO"
+export const DELETE_TODO_SUCCESS = "DELETE_TODO_SUCCESS"
+export const DELETE_TODO_ERROR   = "DELETE_TODO_ERROR"
+// …one phase per sync op.
+export const EDIT_TODO           = "EDIT_TODO"
 ```
 
-### Redux Toolkit (Preferred)
+### Action creators (`<slice>.actions.js`)
 
 ```javascript
-// RTK creates action types + creators automatically
-import { createSlice } from '@reduxjs/toolkit';
+import {
+  CREATE_TODO, CREATE_TODO_SUCCESS, CREATE_TODO_ERROR,
+  READ_TODO,   READ_TODO_SUCCESS,   READ_TODO_ERROR,
+  EDIT_TODO,
+  UPDATE_TODO, UPDATE_TODO_SUCCESS, UPDATE_TODO_ERROR,
+  TOGGLE_TODO, TOGGLE_TODO_SUCCESS, TOGGLE_TODO_ERROR,
+  DELETE_TODO, DELETE_TODO_SUCCESS, DELETE_TODO_ERROR,
+} from "./todo.type";
 
-const todosSlice = createSlice({
-  name: 'todos',
-  initialState: [],
-  reducers: {
-    // Action creator: todosSlice.actions.addTodo
-    // Action type: 'todos/addTodo'
-    addTodo: {
-      reducer(state, action) {
-        state.push(action.payload);
-      },
-      prepare(text) {
-        return { payload: { id: nanoid(), text, completed: false } };
-      }
-    },
-    toggleTodo(state, action) {
-      const todo = state.find(t => t.id === action.payload);
-      if (todo) todo.completed = !todo.completed;
-    }
-  }
-});
+// CREATE: container passes text; saga assigns id; reducer appends on SUCCESS.
+export const createTodo        = (text)    => ({ type: CREATE_TODO,         payload: { text, completed: false } });
+export const createTodoSuccess = (payload) => ({ type: CREATE_TODO_SUCCESS, payload });
+export const createTodoError   = (error)   => ({ type: CREATE_TODO_ERROR,   error });
 
-export const { addTodo, toggleTodo } = todosSlice.actions;
+// READ: container fires on mount; saga fetches; reducer hydrates on SUCCESS.
+export const readTodo          = (payload) => ({ type: READ_TODO,           payload });
+export const readTodoSuccess   = (payload) => ({ type: READ_TODO_SUCCESS,   payload });
+export const readTodoError     = (error)   => ({ type: READ_TODO_ERROR,     error });
+
+// EDIT: sync; reducer just sets currentTodoItem.
+export const editTodo          = (payload) => ({ type: EDIT_TODO,           payload });
+
+// UPDATE: optimistic write through; saga PUTs and SUCCESS clears currentTodoItem.
+export const updateTodo        = (payload) => ({ type: UPDATE_TODO,         payload });
+export const updateTodoSuccess = (payload) => ({ type: UPDATE_TODO_SUCCESS, payload });
+export const updateTodoError   = (error)   => ({ type: UPDATE_TODO_ERROR,   error });
+
+// TOGGLE: optimistic flip; ERROR carries the previous list for rollback.
+export const toggleTodo        = (payload) => ({ type: TOGGLE_TODO,         payload });
+export const toggleTodoSuccess = ()        => ({ type: TOGGLE_TODO_SUCCESS });
+export const toggleTodoError   = (payload, error) => ({ type: TOGGLE_TODO_ERROR, payload, error });
+
+// DELETE: optimistic remove; same rollback shape as toggle.
+export const deleteTodo        = (id)      => ({ type: DELETE_TODO,         payload: { id } });
+export const deleteTodoSuccess = ()        => ({ type: DELETE_TODO_SUCCESS });
+export const deleteTodoError   = (payload, error) => ({ type: DELETE_TODO_ERROR, payload, error });
 ```
 
-### Async Action Pattern
-
-```javascript
-// Request/Success/Failure pattern
-export const fetchUsers = createAsyncThunk(
-  'users/fetch',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await api.getUsers();
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(error.message);
-    }
-  }
-);
-
-// Reducer handles all three states
-extraReducers: (builder) => {
-  builder
-    .addCase(fetchUsers.pending, (state) => {
-      state.loading = true;
-      state.error = null;
-    })
-    .addCase(fetchUsers.fulfilled, (state, action) => {
-      state.loading = false;
-      state.items = action.payload;
-    })
-    .addCase(fetchUsers.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.payload;
-    });
-}
-```
-
-### Dispatching Actions
+### Dispatching from a container
 
 ```jsx
-import { useDispatch } from 'react-redux';
-import { addTodo, toggleTodo } from './todosSlice';
+import { useEffect } from "react";
+import { useDispatch } from "react-redux";
+import { readTodo, toggleTodo, editTodo, deleteTodo } from "../state/todo/todo.actions";
 
-function TodoForm() {
+function TodoListContainer() {
   const dispatch = useDispatch();
-  
-  const handleSubmit = (text) => {
-    dispatch(addTodo(text));  // Dispatch action
-  };
-  
-  const handleToggle = (id) => {
-    dispatch(toggleTodo(id));
-  };
+
+  // READ on mount — saga middleware sees REQUEST, runs getTodos worker.
+  useEffect(() => { dispatch(readTodo()); }, [dispatch]);
+
+  return /* …pass dispatch handlers down to organism… */;
 }
 ```
 
-## FSA (Flux Standard Action)
+### Per-op signature cheatsheet
+
+| Op       | Request creator                  | Success creator        | Error creator                    |
+|----------|----------------------------------|------------------------|----------------------------------|
+| `create` | `createTodo(text)`               | `createTodoSuccess(p)` | `createTodoError(error)`         |
+| `read`   | `readTodo(payload?)`             | `readTodoSuccess(p)`   | `readTodoError(error)`           |
+| `edit`   | `editTodo(payload)` *(sync)*     | —                      | —                                |
+| `update` | `updateTodo(payload)`            | `updateTodoSuccess(p)` | `updateTodoError(error)`         |
+| `toggle` | `toggleTodo(payload)`            | `toggleTodoSuccess()`  | `toggleTodoError(prevList, err)` |
+| `delete` | `deleteTodo(id)`                 | `deleteTodoSuccess()`  | `deleteTodoError(prevList, err)` |
+
+## FSA-ish — but only `type` is mandatory
+
+The template doesn't enforce strict FSA; success/error variants either carry `payload` or carry `error` (a string), and `meta` is unused. The contract that matters:
 
 ```javascript
-// Compliant action structure
-{
-  type: 'users/fetchSuccess',  // Required
-  payload: [...users],         // Data for update
-  meta: { timestamp: Date.now() },  // Optional metadata
-  error: false                 // true if action represents error
-}
+{ type: <STRING_CONST>, payload?: any, error?: string }
 ```
 
 ## Related Terminologies
 
-- **Reducer** (State) - Handles actions to update state
-- **Store** (State) - Receives dispatched actions
-- **Middleware** (State) - Intercepts actions
-- **CRUD** (State) - Action naming for create/read/update/delete
+- **Saga** — listens for REQUEST types, dispatches SUCCESS/ERROR.
+- **Reducer** — switches on all three phases per op.
+- **Store** — dispatches actions through the saga middleware first, then to reducers.
 
 ## Quality Gates
 
-- [ ] Actions are plain objects
-- [ ] Type follows domain/event naming
-- [ ] Payloads are serializable
-- [ ] Async uses request/success/failure
-- [ ] Action creators used for complex actions
-- [ ] TypeScript types for actions
+- [ ] Three constants per async op; one per sync op.
+- [ ] Creators are pure POJO factories (no `dispatch`, no closures over state).
+- [ ] Toggle/delete success creators take **no args**; error creators carry `(prevList, error)`.
+- [ ] Test imports use the same name as the constants (no aliasing).
+- [ ] No `createAsyncThunk` / `createSlice` (those belong to a different archetype).
 
-**Source**: `/docs/state/actions.md`
+**Source**: `templates/chota-react-saga/src/state/todo/todo.type.js`, `todo.actions.js`

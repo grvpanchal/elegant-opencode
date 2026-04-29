@@ -1,201 +1,186 @@
 ---
 name: state-reducer
-description: Reducer design — pure `(state, action) => newState` functions, immutable updates (spread or Immer), default-case handling, and combineReducers composition. Use when writing or reviewing slice reducers, fixing accidental mutations, or splitting a monolithic reducer by domain.
-when_to_use: Writing new reducers or RTK slices; auditing for accidental state mutation or impure operations (Date.now, fetch) inside reducers; composing reducers with combineReducers; testing reducer cases in isolation.
+description: Pure switch/case reducers for the chota-react-saga template — initial-state file, three-phase async cases per CRUD verb, optimistic mutations with `previousState<Items>` rollback, fall-through SUCCESS/ERROR for toggle and delete.
+when_to_use: Authoring or reviewing `<slice>.initial.js` and `<slice>.reducer.js`; verifying every action type from `state-actions` has a matching case (or falls through `default`); ensuring optimistic ops capture rollback state on the REQUEST.
 paths:
-  - "**/store/**/*.{js,ts}"
-  - "**/reducers/**/*.{js,ts}"
-  - "**/*Reducer*.{js,ts}"
-  - "**/*slice*.{js,ts}"
+  - "**/state/**/*.initial.{js,ts}"
+  - "**/state/**/*.reducer.{js,ts}"
 ---
 
-# Reducer
+# Reducer (Saga template)
 
 ## What is a Reducer?
 
-A reducer is a pure function that takes current state and an action, returning new state: `(state, action) => newState`. It's the "law of physics" for your state—deterministic, testable, and enabling time-travel debugging.
+A reducer is a pure function `(state, action) → next state`. It's the only piece of code in the app allowed to *describe* state changes; everything else (UI, sagas, selectors) only reads. In the saga template each domain slice has its own reducer; `combineReducers` glues them into the root reducer.
 
 ## Key Principles
 
-1. **Pure Functions**: No side effects. Same inputs always produce same outputs. No API calls, no random values, no Date.now() inside reducers.
+1. **Initial state lives in its own file.** `<slice>.initial.js` exports `intial<Slice>State` (note the legacy spelling without the 'i' — preserved for the chota-react-saga template's import surface). Reducer tests import it directly.
 
-2. **Immutable Updates**: Never mutate state directly. Always return new objects. Use spread operator or Immer for nested updates.
+2. **Three cases per async op, one per sync op.** Every async CRUD verb owns a triple of `case <OP>_<ENTITY>`, `case <OP>_<ENTITY>_SUCCESS`, `case <OP>_<ENTITY>_ERROR`. Sync ops collapse to one case.
 
-3. **Handle Unknown Actions**: Always return current state for unrecognized action types. Never throw errors.
+3. **`isLoading`, `isContentLoading`, `isActionLoading`.** Three independent flags. `isContentLoading` is set during READ (full reload). `isActionLoading` is set during CREATE/UPDATE. The wider `isLoading` flag covers both. The UI picks which one to render against.
+
+4. **Optimistic on the REQUEST, rollback on the ERROR.** For toggle/delete, the REQUEST case mutates the items list AND captures `previousState<Items>: [...state.<items>]` so the saga can read it on failure. The fall-through `case TOGGLE_X_SUCCESS: case DELETE_X_SUCCESS:` clears `previousState<Items>` to `undefined`.
+
+5. **Spread for immutability.** Never mutate `state`; always `{ ...state, … }`. Same for nested objects. The reducer is the source of truth for that invariant.
+
+6. **Default branch returns current state.** No `throw`, no `console.warn`. Unknown actions are an expected condition (other slices' actions reach this reducer too).
 
 ## Best Practices
 
 ✅ **DO**:
-- Return new state objects (immutability)
-- Handle all action types with switch/case or RTK
-- Use Redux Toolkit (Immer handles immutability)
-- Split reducers by domain (combineReducers)
-- Initialize with meaningful default state
+- Import `<slice>.initial.js` as `intial<Slice>State` — the legacy spelling matches what other files export.
+- Import the helper transforms (e.g. `toggleCheckedState`) from `<slice>.helper.js`; the helper is shared with the saga.
+- Keep `let <items> = []` declared at the top of the function when the reducer rebuilds the list (update/toggle/delete) to avoid `const` rebinding noise.
+- Group cases in the order **READ, CREATE, EDIT, UPDATE, TOGGLE, DELETE**; group SUCCESS/ERROR right after their REQUEST.
 
 ❌ **DON'T**:
-- Mutate state or action parameters
-- Perform side effects (API calls, logging)
-- Call non-pure functions (Date.now(), Math.random())
-- Handle async logic in reducers (use middleware)
-- Create deeply nested state structures
+- Don't dispatch from a reducer (mutating `dispatch` from inside violates purity).
+- Don't read `Date.now()`, `Math.random()`, or `window.*` from a reducer. Side effects belong to the saga.
+- Don't keep entity ids in `currentTodoItem` after a successful UPDATE — clear it back to `intial<Slice>State.currentTodoItem` so the form resets.
 
 ## Code Patterns
 
-### Classic Reducer Pattern
+### Initial state (`<slice>.initial.js`)
 
 ```javascript
-// todosReducer.js
-const initialState = {
-  items: [],
-  loading: false,
-  error: null
+const intialTodoState = {
+  isLoading: false,
+  isActionLoading: false,
+  isContentLoading: false,
+  error: '',
+  todoItems: [],
+  currentTodoItem: { text: '', id: '' }
 };
 
-function todosReducer(state = initialState, action) {
+export default intialTodoState;
+```
+
+### Reducer (`<slice>.reducer.js`)
+
+```javascript
+import { toggleCheckedState } from "./todo.helper";
+import intialTodoState from "./todo.initial";
+import {
+  CREATE_TODO, CREATE_TODO_SUCCESS, CREATE_TODO_ERROR,
+  READ_TODO,   READ_TODO_SUCCESS,   READ_TODO_ERROR,
+  EDIT_TODO,
+  UPDATE_TODO, UPDATE_TODO_SUCCESS, UPDATE_TODO_ERROR,
+  TOGGLE_TODO, TOGGLE_TODO_SUCCESS, TOGGLE_TODO_ERROR,
+  DELETE_TODO, DELETE_TODO_SUCCESS, DELETE_TODO_ERROR,
+} from "./todo.type";
+
+const todo = (state = intialTodoState, action) => {
+  let todoItems = [];
+
   switch (action.type) {
-    case 'todos/add':
+
+    // ── Standard Content Loading ────────────────────────────────────────
+    case READ_TODO:
+      return { ...state, isLoading: true, isContentLoading: true };
+
+    case READ_TODO_SUCCESS:
+      return { ...state, isLoading: false, isContentLoading: false, todoItems: action.payload };
+
+    case READ_TODO_ERROR:
+      return { ...state, isLoading: false, isContentLoading: false, error: action.error };
+
+    // ── Standard Action Modification ────────────────────────────────────
+    case CREATE_TODO:
+      return { ...state, isLoading: true, isActionLoading: true, currentTodoItem: action.payload };
+
+    case CREATE_TODO_SUCCESS:
       return {
         ...state,
-        items: [...state.items, action.payload]  // New array
+        isLoading: false, isActionLoading: false,
+        todoItems: [...state.todoItems, {
+          id: action.payload.id,
+          text: action.payload.text,
+          completed: false,
+        }],
+        currentTodoItem: intialTodoState.currentTodoItem,
       };
-    
-    case 'todos/toggle':
+
+    case CREATE_TODO_ERROR:
       return {
         ...state,
-        items: state.items.map(todo =>
-          todo.id === action.payload
-            ? { ...todo, completed: !todo.completed }  // New object
-            : todo
-        )
+        isLoading: false, isActionLoading: false,
+        error: action.error,
+        currentTodoItem: intialTodoState.currentTodoItem,
       };
-    
-    case 'todos/delete':
+
+    // ── Selected Entity (sync stage step) ───────────────────────────────
+    case EDIT_TODO:
+      return { ...state, currentTodoItem: action.payload };
+
+    // ── Partial Action Modification ─────────────────────────────────────
+    case UPDATE_TODO:
+      todoItems = state.todoItems.map((todo) =>
+        todo.id === action.payload.id
+          ? { ...todo, text: action.payload.text }
+          : todo
+      );
+      return { ...state, isActionLoading: true, todoItems, currentTodoItem: action.payload };
+
+    case UPDATE_TODO_SUCCESS:
+      return { ...state, isActionLoading: false, currentTodoItem: intialTodoState.currentTodoItem };
+
+    case UPDATE_TODO_ERROR:
+      return { ...state, error: action.error, isActionLoading: false, currentTodoItem: intialTodoState.currentTodoItem };
+
+    // ── Parallel Action Modification (optimistic) ───────────────────────
+    case TOGGLE_TODO:
+      todoItems = state.todoItems.map((todo) =>
+        todo.id === action.payload.id ? toggleCheckedState(todo) : todo
+      );
+      return { ...state, previousStateTodoItems: [...state.todoItems], todoItems };
+
+    case DELETE_TODO:
+      todoItems = state.todoItems.filter((todo) => todo.id !== action.payload.id);
       return {
         ...state,
-        items: state.items.filter(t => t.id !== action.payload)
+        previousStateTodoItems: [...state.todoItems],
+        todoItems,
+        currentTodoItem: intialTodoState.currentTodoItem,
       };
-    
+
+    // toggle and delete share fall-through SUCCESS/ERROR cases:
+    case TOGGLE_TODO_SUCCESS:
+    case DELETE_TODO_SUCCESS:
+      return { ...state, previousStateTodoItems: undefined, isLoading: false };
+
+    case TOGGLE_TODO_ERROR:
+    case DELETE_TODO_ERROR:
+      return {
+        ...state,
+        previousStateTodoItems: undefined,
+        isLoading: false,
+        error: action.error,
+        todoItems: action.payload,   // saga sends the rollback list as payload
+      };
+
     default:
-      return state;  // CRITICAL: return current state
+      return state;
   }
-}
-```
+};
 
-### Redux Toolkit (Immer)
-
-```javascript
-// todosSlice.js - RTK uses Immer
-import { createSlice } from '@reduxjs/toolkit';
-
-const todosSlice = createSlice({
-  name: 'todos',
-  initialState: { items: [], loading: false, error: null },
-  reducers: {
-    // "Mutations" are safe with Immer
-    addTodo(state, action) {
-      state.items.push(action.payload);
-    },
-    toggleTodo(state, action) {
-      const todo = state.items.find(t => t.id === action.payload);
-      if (todo) {
-        todo.completed = !todo.completed;
-      }
-    },
-    deleteTodo(state, action) {
-      state.items = state.items.filter(t => t.id !== action.payload);
-    }
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchTodos.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchTodos.fulfilled, (state, action) => {
-        state.loading = false;
-        state.items = action.payload;
-      })
-      .addCase(fetchTodos.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.error.message;
-      });
-  }
-});
-```
-
-### Combining Reducers
-
-```javascript
-// rootReducer.js
-import { combineReducers } from '@reduxjs/toolkit';
-import todosReducer from './todosSlice';
-import usersReducer from './usersSlice';
-import uiReducer from './uiSlice';
-
-const rootReducer = combineReducers({
-  todos: todosReducer,
-  users: usersReducer,
-  ui: uiReducer
-});
-
-export default rootReducer;
-
-// State shape:
-// { todos: {...}, users: {...}, ui: {...} }
-```
-
-### Immutable Update Patterns
-
-```javascript
-// Updating nested objects (without Immer)
-case 'users/updateEmail':
-  return {
-    ...state,
-    users: {
-      ...state.users,
-      [action.payload.id]: {
-        ...state.users[action.payload.id],
-        email: action.payload.email
-      }
-    }
-  };
-
-// With Immer (RTK)
-updateEmail(state, action) {
-  state.users[action.payload.id].email = action.payload.email;
-}
-```
-
-## Testing Reducers
-
-```javascript
-describe('todosReducer', () => {
-  it('should add todo', () => {
-    const initial = { items: [] };
-    const action = { type: 'todos/add', payload: { id: 1, text: 'Test' } };
-    
-    const result = todosReducer(initial, action);
-    
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].text).toBe('Test');
-    expect(result).not.toBe(initial);  // New reference
-  });
-});
+export default todo;
 ```
 
 ## Related Terminologies
 
-- **Actions** (State) - Trigger reducer execution
-- **Store** (State) - Holds state, calls reducers
-- **Selectors** (State) - Read computed data
-- **Middleware** (State) - Pre-processes actions
+- **Actions** — every type matched in `switch` is exported from `<slice>.type.js`.
+- **Saga** — emits SUCCESS/ERROR actions that this reducer responds to.
+- **Helper** — `<slice>.helper.js` provides `toggleCheckedState` (shared with the saga).
+- **Selectors** — derive view-data from this state shape; they're the only consumers downstream.
 
 ## Quality Gates
 
-- [ ] Pure functions (no side effects)
-- [ ] Immutable updates (new objects)
-- [ ] Default case returns state
-- [ ] Organized by domain
-- [ ] TypeScript typed state/actions
-- [ ] Unit tests for each case
+- [ ] Every type imported is matched in a `case`; nothing `default`-only.
+- [ ] Optimistic ops set `previousState<Items>` on REQUEST.
+- [ ] SUCCESS clears `currentTodoItem` and `previousState<Items>`.
+- [ ] No `await`, no `dispatch`, no `Math.random()`, no `Date`.
+- [ ] `default` returns `state` untouched.
 
-**Source**: `/docs/state/reducer.md`
+**Source**: `templates/chota-react-saga/src/state/todo/todo.reducer.js`, `todo.initial.js`

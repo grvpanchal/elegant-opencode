@@ -1,164 +1,127 @@
 ---
 name: state-store
-description: Redux store architecture — configureStore setup, slice organisation by domain, normalised state shape, Provider wiring, typed hooks (useAppDispatch/useAppSelector), and DevTools. Use when scaffolding a new Redux store, splitting state into slices, or auditing state shape for normalisation and serialisability.
-when_to_use: Scaffolding a new configureStore; organising slices by domain; enforcing a single-store rule; shaping state as `{ byId, allIds }`; wiring `<Provider>` and typed hooks at the app root.
+description: Redux store wiring for the chota-react-saga template — single createStore, combineReducers per domain, applyMiddleware(sagaMiddleware), composeWithDevTools, and a one-line `sagaMiddleware.run(rootSaga)` at boot. Use when scaffolding the root store or auditing how slices and middleware compose.
+when_to_use: Authoring or reviewing `src/state/index.js` (the store), `src/state/rootReducer.js`, or wiring up new middleware; verifying that the saga middleware is created BEFORE `createStore` and `.run(rootSaga)` is called AFTER.
 paths:
-  - "**/store/**/*.{js,ts}"
-  - "**/redux/**/*.{js,ts}"
-  - "**/*Store*.{js,ts}"
-  - "**/*slice*.{js,ts}"
+  - "**/state/index.{js,ts}"
+  - "**/state/rootReducer.{js,ts}"
+  - "**/state/store.{js,ts}"
 ---
 
-# Store
+# Store (Saga template)
 
-## What is a Store?
+## What is the Store?
 
-A store is your application's single source of truth—a centralized JavaScript object where all state lives. Any component can access state without prop drilling, and updates follow predictable rules (dispatch action → reducer → new state).
+The store is the single source of truth for application state. It holds the combined reducer, the middleware chain, and the dispatcher. In the saga template the store is also the seam where the saga middleware gets `.run(rootSaga)` so every slice's watcher starts listening at boot.
 
 ## Key Principles
 
-1. **Single Source of Truth**: One store for entire app. No scattered state across components. Every piece of data has one authoritative location.
+1. **One store, period.** No nested stores, no per-feature stores. Every slice lives under `combineReducers({...})` and is reached through `useSelector((state) => state.<slice>.…)`.
 
-2. **State is Read-Only**: Only way to change state is dispatching actions. No direct mutations. This enables time-travel debugging and predictability.
+2. **`createStore` from `redux` (not `configureStore`).** This template stays on plain redux + redux-saga + the devtools extension. RTK's `configureStore` would compose middleware differently and conflict with `composeWithDevTools(applyMiddleware(...))`.
 
-3. **Pure Reducer Updates**: Reducers are pure functions (state + action → newState). Same inputs always produce same outputs.
+3. **Saga middleware is created first, run last.** Order matters: `const sagaMiddleware = createSagaMiddleware()` → wrap with `applyMiddleware(sagaMiddleware)` → enhance with `composeWithDevTools(...enhancers)` → `createStore(reducer, composedEnhancers)` → finally `sagaMiddleware.run(rootSaga)`. Calling `.run()` before `createStore` is a runtime error.
+
+4. **Store is provided once, at the App root.** `<Provider store={store}>` wraps the React tree in `App.jsx`. Containers reach state through `useSelector` and dispatch with `useDispatch`. Nothing else imports `store` directly.
+
+5. **DevTools opt-in.** `composeWithDevTools` is a no-op when the extension isn't installed, so it's safe to ship in production builds without conditional code.
 
 ## Best Practices
 
 ✅ **DO**:
-- Organize state by domain (users, products, ui)
-- Keep state normalized (avoid nested duplicates)
-- Use Redux Toolkit for less boilerplate
-- Initialize with meaningful default values
-- Subscribe components only to needed state slices
+- Keep `rootReducer.js` to a single `combineReducers({ ... })` call. Add `/* istanbul ignore file */` so coverage doesn't penalise the wiring file.
+- Keep `index.js` (the store) under ~25 lines. It does four things: import, create middleware, compose, run.
+- Add slices to `combineReducers` in alphabetical order; add watchers to `rootSagas` `all([...])` in the same order. Easier diffing as the app grows.
 
 ❌ **DON'T**:
-- Mutate state directly (always return new objects)
-- Store derived data (calculate with selectors)
-- Put non-serializable values (functions, classes) in store
-- Create multiple stores (one store rule)
-- Store local-only UI state globally (use local state)
+- Don't `applyMiddleware(thunk, sagaMiddleware)` — pick one async strategy. The saga template chose sagas.
+- Don't lazy-load slices into the store. Reducer composition must be static at boot so the saga's `select(state => state.x)` is safe.
+- Don't run sagas in tests by reaching into the production store. Use `runSaga` from `redux-saga` to drive workers in isolation.
 
 ## Code Patterns
 
-### Redux Toolkit Store Setup
+### `src/state/index.js`
 
 ```javascript
-// store/index.js
-import { configureStore } from '@reduxjs/toolkit';
-import usersReducer from './usersSlice';
-import productsReducer from './productsSlice';
-import uiReducer from './uiSlice';
+import { composeWithDevTools } from '@redux-devtools/extension'
+import { createStore, applyMiddleware } from 'redux'
+import createSagaMiddleware from "redux-saga";
 
-export const store = configureStore({
-  reducer: {
-    users: usersReducer,
-    products: productsReducer,
-    ui: uiReducer
-  },
-  // Middleware auto-included: thunk, serializableCheck, immutableCheck
-});
+import reducer from "./rootReducer";
+import sagas from "./rootSagas";
 
-export type RootState = ReturnType<typeof store.getState>;
-export type AppDispatch = typeof store.dispatch;
+// 1. create the saga middleware
+const sagaMiddleware = createSagaMiddleware();
+
+// 2. mount it on the Store
+const enhancer = applyMiddleware(sagaMiddleware)
+const enhancers = [enhancer];
+const composedEnhancers = composeWithDevTools(...enhancers)
+
+const store = createStore(reducer, composedEnhancers);
+
+// 3. then run the saga (after createStore!)
+sagaMiddleware.run(sagas);
+
+export default store;
 ```
 
-### Slice Pattern (RTK)
+### `src/state/rootReducer.js`
 
 ```javascript
-// store/todosSlice.js
-import { createSlice } from '@reduxjs/toolkit';
+/* istanbul ignore file */
+import { combineReducers } from "redux";
+import todo from "./todo/todo.reducer";
+import filters from "./filters/filters.reducer";
+import config from "./config/config.reducer";
 
-const todosSlice = createSlice({
-  name: 'todos',
-  initialState: {
-    items: [],
-    loading: false,
-    error: null
-  },
-  reducers: {
-    addTodo: (state, action) => {
-      // RTK uses Immer - "mutations" are safe
-      state.items.push(action.payload);
-    },
-    toggleTodo: (state, action) => {
-      const todo = state.items.find(t => t.id === action.payload);
-      if (todo) todo.completed = !todo.completed;
-    },
-    removeTodo: (state, action) => {
-      state.items = state.items.filter(t => t.id !== action.payload);
-    }
-  }
+export default combineReducers({
+  todo,
+  filters,
+  config,
 });
-
-export const { addTodo, toggleTodo, removeTodo } = todosSlice.actions;
-export default todosSlice.reducer;
 ```
 
-### Provider Setup
+### Provider wiring at the app root (`src/App.jsx`)
 
 ```jsx
-// index.js
-import { Provider } from 'react-redux';
-import { store } from './store';
-import App from './App';
+import { Provider } from "react-redux";
+import store from "./state";
+import HomePage from "./pages";
 
-ReactDOM.render(
-  <Provider store={store}>
-    <App />
-  </Provider>,
-  document.getElementById('root')
-);
+export default function App() {
+  return (
+    <Provider store={store}>
+      <HomePage />
+    </Provider>
+  );
+}
 ```
 
-### Typed Hooks
+### Reading and dispatching from a container
 
-```javascript
-// store/hooks.js
-import { useDispatch, useSelector } from 'react-redux';
+```jsx
+import { useSelector, useDispatch } from "react-redux";
+import { readTodo } from "../state/todo/todo.actions";
 
-export const useAppDispatch = () => useDispatch<AppDispatch>();
-export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
-```
-
-## State Shape Guidelines
-
-```javascript
-// Good: Normalized, flat structure
-{
-  users: {
-    byId: { '1': { id: '1', name: 'John' } },
-    allIds: ['1'],
-    loading: false
-  },
-  posts: {
-    byId: { 'a': { id: 'a', authorId: '1', title: '...' } },
-    allIds: ['a']
-  }
-}
-
-// Bad: Nested, denormalized
-{
-  users: [
-    { id: '1', name: 'John', posts: [{ id: 'a', title: '...' }] }
-  ]
-}
+const todos = useSelector((state) => state.todo.todoItems);
+const dispatch = useDispatch();
+dispatch(readTodo());   // saga middleware sees this, runs the worker
 ```
 
 ## Related Terminologies
 
-- **Actions** (State) - Events that trigger state changes
-- **Reducer** (State) - Functions that update state
-- **Selectors** (State) - Extract data from store
-- **Middleware** (State) - Intercept actions for async/logging
+- **Reducer** — slices are wired through `combineReducers` here.
+- **Saga** — `rootSagas.js` is run by this file.
+- **Middleware** — sagas ARE middleware; this file is where they get applied.
+- **DevTools** — `composeWithDevTools` is the wiring point.
 
 ## Quality Gates
 
-- [ ] Single store for application
-- [ ] State organized by domain
-- [ ] No direct mutations
-- [ ] TypeScript types for state
-- [ ] DevTools configured
-- [ ] Local vs global state appropriate
+- [ ] `createStore` is called once; the result is the default export.
+- [ ] `sagaMiddleware.run(sagas)` is called AFTER `createStore`.
+- [ ] `combineReducers` is the only thing rootReducer.js does.
+- [ ] No `configureStore`, no thunk middleware, no async logic in `index.js`.
+- [ ] Provider wraps the whole tree; no nested `<Provider>`.
 
-**Source**: `/docs/state/store.md`
+**Source**: `templates/chota-react-saga/src/state/index.js`, `rootReducer.js`

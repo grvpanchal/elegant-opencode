@@ -7,7 +7,7 @@
     "schema-agent":    { "mode": "subagent", "model": "opencode/gpt-5-nano",            "prompt": "./agents/schema-agent.md",    "hidden": true },
     "selectors-agent": { "mode": "subagent", "model": "opencode/gpt-5-nano",            "prompt": "./agents/selectors-agent.md", "hidden": true },
     "atom-agent":      { "mode": "subagent", "model": "opencode/gpt-5-nano",            "prompt": "./agents/atom-agent.md",      "hidden": true },
-    "molecule-agent":  { "mode": "subagent", "model": "opencode/minimax-m2.5-free",     "prompt": "./agents/molecule-agent.md",  "hidden": true },
+    "molecule-agent":  { "mode": "subagent", "model": "opencode/big-pickle",            "prompt": "./agents/molecule-agent.md",  "hidden": true },
     "organism-agent":  { "mode": "subagent", "model": "opencode/big-pickle",            "prompt": "./agents/organism-agent.md",  "hidden": true },
     "container-agent": { "mode": "subagent", "model": "opencode/hy3-preview-free",      "prompt": "./agents/container-agent.md", "hidden": true }
   },

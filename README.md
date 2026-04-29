@@ -210,7 +210,7 @@ models so you can experiment with zero credentials and zero local GPU:
 |-------------------|------------------------------------|
 | elegant-router    | `opencode/big-pickle`              |
 | organism-agent    | `opencode/big-pickle`              |
-| molecule-agent    | `opencode/minimax-m2.5-free`       |
+| molecule-agent    | `opencode/big-pickle`              |
 | atom-agent        | `opencode/gpt-5-nano`              |
 | container-agent   | `opencode/hy3-preview-free`        |
 | selectors-agent   | `opencode/gpt-5-nano`              |

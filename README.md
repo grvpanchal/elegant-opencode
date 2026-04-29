@@ -2,7 +2,7 @@
 
 An [opencode](https://opencode.ai) plugin that turns the [Universal Frontend Architecture](https://elegantfrontend.training/blog/universal-frontend-architecture) into a microtask harness for **small local models**. The goal: run on **Qwen3 32B** or **Gemma3 27B** via Ollama and produce code with the same quality as a frontier model, by reducing every coding decision to a tightly-scoped microtask the model cannot get wrong.
 
-This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth.
+This plugin reads the architecture from [grvpanchal/elegant](https://github.com/grvpanchal/elegant) — the `skills/` SKILL.md files are the source of truth. A vendored copy of the 14 skills referenced by the pipeline lives in this repo at `skills/` so you can iterate on them locally; override with `ELEGANT_SKILLS_ROOT` to point elsewhere.
 
 ---
 
@@ -97,6 +97,7 @@ A non-Todo entity (`Comment`, no `toggle` op) projects to the same 128-file tree
 @elegant/opencode/
 ├── opencode.json
 ├── agents/                       # 7 .md files (1 router + 6 variable-microtask agents)
+├── skills/                       # 14 vendored SKILL.md files from grvpanchal/elegant
 ├── src/
 │   ├── index.js                  # opencode plugin entrypoint
 │   ├── terminology.js            # 21 microtasks, dependency graph, fixed vs variable

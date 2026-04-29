@@ -3,11 +3,14 @@
 // best with tight, exemplar-rich prompts; we strip the rest.
 
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_ROOT =
   process.env.ELEGANT_SKILLS_ROOT ||
-  join(process.cwd(), "..", "elegant-ref", "skills");
+  join(__dirname, "..", "skills");
 
 export function loadSkill(skillName, root = DEFAULT_ROOT) {
   if (!skillName) return null;
